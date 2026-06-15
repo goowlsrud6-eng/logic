@@ -1,0 +1,174 @@
+# 완전 초보자용 시작 가이드
+
+이 문서는 `특별재고 Django 대시보드`를 처음 실행하는 사람을 위한 안내입니다.
+
+## 0. 먼저 이해하기
+
+이 프로젝트는 엑셀 파일 하나처럼 더블클릭해서 바로 열리는 파일이 아닙니다. 여러 파일이 들어 있는 **프로그램 폴더**입니다.
+
+따라서 해야 할 일은 아래 순서입니다.
+
+1. 프로젝트 폴더 전체를 다운로드한다.
+2. Python을 설치한다.
+3. CMD 또는 PowerShell을 연다.
+4. 프로젝트 폴더로 이동한다.
+5. 실행 명령어를 입력한다.
+6. 브라우저에서 대시보드에 접속한다.
+
+## 1. 프로젝트 파일 다운로드하기
+
+### 방법 A: ZIP으로 다운로드하기
+
+Git을 모르면 이 방법이 가장 쉽습니다.
+
+1. GitHub 저장소 페이지를 엽니다.
+2. 초록색 `Code` 버튼을 누릅니다.
+3. `Download ZIP`을 누릅니다.
+4. 다운로드된 ZIP 파일을 찾습니다.
+5. ZIP 파일에서 마우스 오른쪽 버튼을 누릅니다.
+6. `압축 풀기` 또는 `Extract All`을 누릅니다.
+7. 압축을 푼 폴더를 원하는 위치로 옮깁니다.
+
+예를 들어 아래 위치에 둡니다.
+
+```text
+C:\Users\내이름\Desktop\logic
+```
+
+압축을 푼 폴더 안에는 아래 파일들이 보여야 합니다.
+
+```text
+manage.py
+requirements.txt
+README.md
+run_windows_cmd.bat
+run_windows_powershell.ps1
+inventory
+special_stock
+```
+
+이 파일들이 보이면 다운로드가 제대로 된 것입니다.
+
+### 방법 B: Git으로 다운로드하기
+
+Git을 설치했고 사용할 줄 알면 아래처럼 합니다.
+
+```bat
+git clone <저장소주소> logic
+cd logic
+```
+
+초보자라면 일단 ZIP 다운로드 방식을 추천합니다.
+
+## 2. Python 설치 확인하기
+
+Windows에서 CMD를 열고 아래 명령어를 입력합니다.
+
+```bat
+py --version
+```
+
+정상이라면 아래처럼 Python 버전이 나옵니다.
+
+```text
+Python 3.12.x
+```
+
+만약 `py`를 찾을 수 없다고 나오면 Python이 없거나 PATH 설정이 안 된 것입니다. Python을 설치할 때 `Add python.exe to PATH`를 체크해야 합니다.
+
+## 3. CMD 열기
+
+Windows에서 아래 순서로 CMD를 엽니다.
+
+1. 키보드에서 `윈도우 키`를 누릅니다.
+2. `cmd`라고 입력합니다.
+3. `명령 프롬프트`를 실행합니다.
+
+## 4. 프로젝트 폴더로 이동하기
+
+예를 들어 프로젝트를 바탕화면의 `logic` 폴더에 풀었다면 CMD에 아래처럼 입력합니다.
+
+```bat
+cd C:\Users\내이름\Desktop\logic
+```
+
+이때 `내이름` 부분은 본인 Windows 사용자 이름으로 바꿔야 합니다.
+
+폴더로 잘 들어왔는지 확인하려면 아래 명령어를 입력합니다.
+
+```bat
+dir
+```
+
+목록에 `manage.py`와 `requirements.txt`가 보이면 맞는 폴더입니다.
+
+## 5. 가장 쉬운 실행 방법
+
+프로젝트 폴더에 들어간 상태에서 아래 명령어 하나만 입력합니다.
+
+```bat
+run_windows_cmd.bat
+```
+
+이 파일은 아래 작업을 자동으로 합니다.
+
+1. `.venv` 가상환경 생성
+2. 가상환경 실행
+3. 필요한 패키지 설치
+4. 데이터베이스 준비
+5. Django 서버 실행
+
+## 6. 수동으로 실행하는 방법
+
+자동 실행 파일이 안 되면 아래 명령어를 한 줄씩 입력합니다.
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
+```
+
+중간에 오류가 나면 그 다음 줄로 넘어가지 말고 오류 내용을 확인해야 합니다.
+
+## 7. 브라우저에서 접속하기
+
+CMD 화면에 아래와 비슷한 문구가 나오면 서버가 켜진 것입니다.
+
+```text
+Starting development server at http://0.0.0.0:8000/
+```
+
+이제 크롬 또는 엣지 주소창에 아래 주소를 입력합니다.
+
+```text
+http://localhost:8000
+```
+
+## 8. 서버 끄기
+
+CMD 창에서 아래 키를 누릅니다.
+
+```text
+Ctrl + C
+```
+
+## 9. 자주 하는 실수
+
+### `source`를 입력했는데 안 되는 경우
+
+`source .venv/bin/activate`는 Windows CMD용 명령어가 아닙니다. Windows CMD에서는 아래를 써야 합니다.
+
+```bat
+.venv\Scripts\activate.bat
+```
+
+### `manage.py`가 없다고 나오는 경우
+
+프로젝트 폴더가 아닌 다른 폴더에서 명령어를 실행한 것입니다. `dir`을 입력해서 `manage.py`가 보이는지 확인하세요.
+
+### `pip install`이 실패하는 경우
+
+인터넷, 회사 보안망, 방화벽 때문에 막힐 수 있습니다. 이때는 오류 메시지를 그대로 복사해서 확인해야 합니다.
