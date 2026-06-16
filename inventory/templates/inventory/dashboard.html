@@ -66,7 +66,7 @@
           <thead class="table-light"><tr><th>품목명</th><th>현재고</th><th>입고예정수량</th><th>입고후재고</th><th>배송</th><th>미출고수량(접수)</th><th>최근한주 판매</th><th>총판매</th><th>총판매 기준 현재고</th><th>총판매 기준 입고포함</th><th>최근한주 기준 현재고</th><th>최근한주 기준 입고포함</th><th>판매상태</th></tr></thead>
           <tbody>
           {% for row in summary %}
-            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}">{{ row.product_name }}</a></td><td>{{ row.available_stock|floatformat:0 }}</td><td>{{ row.inbound_qty|floatformat:0 }}</td><td>{{ row.stock_after_inbound|floatformat:0 }}</td><td>{{ row.delivery_qty|floatformat:0 }}</td><td>{{ row.pending_qty|floatformat:0 }}</td><td>{{ row.recent_week_sales|floatformat:0 }}</td><td>{{ row.total_sales|floatformat:0 }}</td><td>{{ row.current_total_weeks|floatformat:1 }}</td><td>{{ row.inbound_total_weeks|floatformat:1 }}</td><td>{{ row.current_recent_weeks|floatformat:1 }}</td><td>{{ row.inbound_recent_weeks|floatformat:1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
+            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|floatformat:0 }}</td><td>{{ row.inbound_qty|floatformat:0 }}</td><td>{{ row.stock_after_inbound|floatformat:0 }}</td><td>{{ row.delivery_qty|floatformat:0 }}</td><td>{{ row.pending_qty|floatformat:0 }}</td><td>{{ row.recent_week_sales|floatformat:0 }}</td><td>{{ row.total_sales|floatformat:0 }}</td><td>{{ row.current_total_weeks|floatformat:1 }}</td><td>{{ row.inbound_total_weeks|floatformat:1 }}</td><td>{{ row.current_recent_weeks|floatformat:1 }}</td><td>{{ row.inbound_recent_weeks|floatformat:1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
           {% empty %}
             <tr><td colspan="13" class="text-muted">아직 처리된 재고/판매 데이터가 없습니다.</td></tr>
           {% endfor %}
@@ -74,6 +74,10 @@
         </table>
       </div>
     </div>
+  </section>
+
+  <section class="card shadow-sm mb-4">
+    <div class="card-body"><h2 class="h5">주차별 재고/판매 스냅샷</h2><p class="text-muted small mb-2">재고/판매 파일은 업로드 때마다 새 스냅샷으로 보관됩니다. 과거 주차를 클릭하면 해당 주차 기준 요약을 조회할 수 있습니다.</p><div class="d-flex flex-wrap gap-2">{% for upload in stock_uploads %}<a class="btn btn-sm {% if latest_file.id == upload.id %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{% url 'dashboard' %}?upload_id={{ upload.id }}">{{ upload.week_label|default:upload.reference_date }} / {{ upload.original_name }}</a>{% empty %}<span class="text-muted">저장된 주차 스냅샷이 없습니다.</span>{% endfor %}</div></div>
   </section>
 
   <section class="card shadow-sm">

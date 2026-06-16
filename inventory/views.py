@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from .forms import MultiUploadInventoryForm
+from .forms import InboundScheduleForm, MultiUploadInventoryForm
 from .models import InboundSchedule, ProductOptionMetric, UploadedFile
 from .services import (
     infer_week_label,
@@ -16,6 +16,7 @@ from .services import (
     parse_combined_single_sheet_workbook,
     parse_inbound_schedule_workbook,
     parse_product_master_workbook,
+    parse_date,
     parse_special_stock_workbook,
     planned_inbound_by_key,
     safe_weeks,
@@ -23,12 +24,17 @@ from .services import (
 )
 
 
-def latest_stock_file():
-    return UploadedFile.objects.filter(
+def latest_stock_file(upload_id=None):
+    base_qs = UploadedFile.objects.filter(
         status=UploadedFile.Status.COMPLETED,
         file_type__in=[UploadedFile.FileType.STOCK_SALES, UploadedFile.FileType.LEGACY],
         metrics__isnull=False,
-    ).distinct().order_by('-reference_date', '-created_at').first()
+    ).distinct()
+    if upload_id:
+        selected = base_qs.filter(pk=upload_id).first()
+        if selected:
+            return selected
+    return base_qs.order_by('-reference_date', '-created_at').first()
 
 
 def live_option_rows(metrics):
@@ -104,7 +110,7 @@ def summarize_products(option_rows):
 
 
 def dashboard(request):
-    latest_file = latest_stock_file()
+    latest_file = latest_stock_file(request.GET.get('upload_id'))
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file).order_by('product_name', 'option_name') if latest_file else ProductOptionMetric.objects.none()
     option_rows = live_option_rows(metrics)
     summary = summarize_products(option_rows)
@@ -130,6 +136,7 @@ def dashboard(request):
         'top_surges': [row for row in summary if row['sales_trend'] in ['판매 급상승', '판매 상승']][:10],
         'top_drops': [row for row in summary if row['sales_trend'] in ['판매 급하락', '판매 하락']][:10],
         'upload_form': MultiUploadInventoryForm(),
+        'stock_uploads': UploadedFile.objects.filter(file_type__in=[UploadedFile.FileType.STOCK_SALES, UploadedFile.FileType.LEGACY], status=UploadedFile.Status.COMPLETED).order_by('-reference_date', '-created_at')[:20],
         'uploads': UploadedFile.objects.order_by('-created_at')[:10],
     }
     return render(request, 'inventory/dashboard.html', context)
@@ -180,7 +187,7 @@ def upload_inventory(request):
 
 
 def product_detail(request, product_name):
-    latest_file = latest_stock_file()
+    latest_file = latest_stock_file(request.GET.get('upload_id'))
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file, product_name=product_name).order_by('option_name') if latest_file else ProductOptionMetric.objects.none()
     option_rows = live_option_rows(metrics)
     return render(request, 'inventory/product_detail.html', {
@@ -191,10 +198,46 @@ def product_detail(request, product_name):
 
 def inbound_schedule(request):
     today = timezone.localdate()
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        inbound_id = request.POST.get('inbound_id')
+        if action == 'delete' and inbound_id:
+            InboundSchedule.objects.filter(pk=inbound_id).delete()
+            messages.success(request, '입고예정 건을 삭제했습니다.')
+            return redirect('inbound_schedule')
+
+        form = InboundScheduleForm(request.POST)
+        if form.is_valid():
+            inbound_date = parse_date(form.cleaned_data['inbound_date'], today)
+            target = InboundSchedule.objects.filter(pk=inbound_id).first() if inbound_id else None
+            if not target:
+                latest_inbound_upload = UploadedFile.objects.filter(file_type=UploadedFile.FileType.INBOUND_SCHEDULE).order_by('-created_at').first()
+                target = InboundSchedule(uploaded_file=latest_inbound_upload or UploadedFile.objects.create(
+                    original_name='manual-inbound',
+                    file='manual/inbound.txt',
+                    file_type=UploadedFile.FileType.INBOUND_SCHEDULE,
+                    status=UploadedFile.Status.COMPLETED,
+                    message='화면에서 직접 등록한 입고예정입니다.',
+                ))
+            target.supplier_option_name = form.cleaned_data['supplier_option_name']
+            target.product_name = form.cleaned_data['product_name']
+            target.option_name = form.cleaned_data['option_name']
+            target.inbound_date = inbound_date
+            target.quantity = form.cleaned_data['quantity']
+            target.memo = form.cleaned_data['memo']
+            target.status = InboundSchedule.Status.PLANNED
+            target.is_completed = False
+            target.save()
+            messages.success(request, '입고예정 건을 저장했습니다.')
+        else:
+            messages.error(request, '입고예정 입력값을 확인해주세요.')
+        return redirect('inbound_schedule')
+
     inbound_schedules = InboundSchedule.objects.order_by('inbound_date', 'product_name', 'option_name')
     return render(request, 'inventory/inbound_schedule.html', {
         'inbound_schedules': inbound_schedules,
         'today': today,
+        'inbound_form': InboundScheduleForm(),
     })
 
 

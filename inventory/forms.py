@@ -33,3 +33,12 @@ class MultiUploadInventoryForm(forms.Form):
 
 # 이전 코드/문서와의 호환을 위해 이름은 남겨둔다.
 UploadInventoryFileForm = MultiUploadInventoryForm
+
+
+class InboundScheduleForm(forms.Form):
+    supplier_option_name = forms.CharField(label='공급처옵션명', required=False, max_length=120)
+    product_name = forms.CharField(label='상품명', max_length=255)
+    option_name = forms.CharField(label='옵션명', required=False, max_length=255)
+    inbound_date = forms.CharField(label='입고예정일', required=False, help_text='예: 20260624, 6/24, 0624')
+    quantity = forms.FloatField(label='입고예정수량', min_value=0)
+    memo = forms.CharField(label='비고', required=False, max_length=255)

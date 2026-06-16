@@ -1,7 +1,7 @@
 import hashlib
 import re
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -97,8 +97,47 @@ def as_number(value):
     return 0.0 if pd.isna(numeric) else float(numeric)
 
 
-def parse_date(value):
-    parsed = pd.to_datetime(value, errors='coerce')
+def parse_date(value, reference_date=None):
+    """Parse common Korean Excel date inputs safely.
+
+    Handles yyyymmdd, yyyy/mm/dd, yyyy-mm-dd, m/d, mm/dd and mmdd.
+    Numeric yyyymmdd must be treated as a calendar date, not Unix nanoseconds.
+    """
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
+    base_year = (reference_date or timezone.localdate()).year
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith('.0'):
+        text = text[:-2]
+
+    compact = re.sub(r'[^0-9]', '', text)
+    if len(compact) == 8:
+        try:
+            return datetime.strptime(compact, '%Y%m%d').date()
+        except ValueError:
+            pass
+    if len(compact) in {3, 4} and not re.match(r'^[12][0-9]{3}', compact):
+        compact = compact.zfill(4)
+        try:
+            return date(base_year, int(compact[:2]), int(compact[2:]))
+        except ValueError:
+            pass
+
+    slash_match = re.fullmatch(r'(\d{1,2})[/-](\d{1,2})', text)
+    if slash_match:
+        try:
+            return date(base_year, int(slash_match.group(1)), int(slash_match.group(2)))
+        except ValueError:
+            pass
+
+    parsed = pd.to_datetime(text, errors='coerce')
     return parsed.date() if pd.notna(parsed) else None
 
 
@@ -359,7 +398,7 @@ def parse_basic_inventory_workbook(uploaded_file):
             'delivery_qty': row.get(colmap.get('delivery_qty'), 0),
             'recent_week_sales': row.get(colmap['recent_week_sales'], 0),
             'total_sales': row.get(colmap['total_sales'], 0),
-            'open_date': parse_date(row.get(colmap.get('open_date'))) if 'open_date' in colmap else None,
+            'open_date': parse_date(row.get(colmap.get('open_date')), uploaded_file.reference_date) if 'open_date' in colmap else None,
         })
     return finish_metric_upload(uploaded_file, items, source_sheet='기초파일')
 
@@ -389,7 +428,7 @@ def parse_special_stock_workbook(uploaded_file):
                 'delivery_qty': row.get(colmap.get('delivery_qty'), 0),
                 'recent_week_sales': row.get(colmap.get('recent_week_sales'), 0),
                 'total_sales': row.get(colmap.get('total_sales'), 0),
-                'open_date': parse_date(row.get(colmap.get('open_date'))) if 'open_date' in colmap else None,
+                'open_date': parse_date(row.get(colmap.get('open_date')), uploaded_file.reference_date) if 'open_date' in colmap else None,
             })
     uploaded_file.file_type = UploadedFile.FileType.LEGACY
     uploaded_file.save(update_fields=['file_type'])
@@ -412,7 +451,7 @@ def parse_product_master_workbook(uploaded_file):
             option_name=clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else '',
             defaults={
                 'supplier_option_name': str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else '',
-                'open_date': parse_date(row.get(colmap.get('open_date'))) if 'open_date' in colmap else None,
+                'open_date': parse_date(row.get(colmap.get('open_date')), uploaded_file.reference_date) if 'open_date' in colmap else None,
             },
         )
         count += 1
@@ -436,7 +475,7 @@ def parse_inbound_schedule_workbook(uploaded_file):
         qty = as_number(row.get(colmap['inbound_qty']))
         if not product_name or qty <= 0:
             continue
-        inbound_date = parse_date(row.get(colmap.get('inbound_date'))) if 'inbound_date' in colmap else None
+        inbound_date = parse_date(row.get(colmap.get('inbound_date')), uploaded_file.reference_date) if 'inbound_date' in colmap else None
         product_code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
         supplier = str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else ''
         option_name = clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else ''
@@ -447,23 +486,37 @@ def parse_inbound_schedule_workbook(uploaded_file):
             '취소': InboundSchedule.Status.CANCELED,
             '예정': InboundSchedule.Status.PLANNED,
         }.get(status_label, InboundSchedule.Status.PLANNED)
-        lookup = {
-            'supplier_option_name': supplier,
-            'product_name': product_name,
-            'option_name': option_name,
-            'inbound_date': inbound_date,
-        }
-        InboundSchedule.objects.update_or_create(
-            **lookup,
-            defaults={
-                'uploaded_file': uploaded_file,
-                'product_code': product_code,
-                'quantity': qty,
-                'memo': memo,
-                'status': status,
-                'is_completed': status == InboundSchedule.Status.COMPLETED,
-            },
+        base_qs = InboundSchedule.objects.filter(
+            supplier_option_name=supplier,
+            product_name=product_name,
+            option_name=option_name,
         )
+        if memo:
+            target = base_qs.filter(memo=memo).first()
+        else:
+            same_option = list(base_qs[:2])
+            target = same_option[0] if len(same_option) == 1 else base_qs.filter(inbound_date=inbound_date).first()
+
+        defaults = {
+            'uploaded_file': uploaded_file,
+            'product_code': product_code,
+            'inbound_date': inbound_date,
+            'quantity': qty,
+            'memo': memo,
+            'status': status,
+            'is_completed': status == InboundSchedule.Status.COMPLETED,
+        }
+        if target:
+            for field, value in defaults.items():
+                setattr(target, field, value)
+            target.save(update_fields=list(defaults.keys()) + ['updated_at'])
+        else:
+            InboundSchedule.objects.create(
+                supplier_option_name=supplier,
+                product_name=product_name,
+                option_name=option_name,
+                **defaults,
+            )
         count += 1
     uploaded_file.file_type = UploadedFile.FileType.INBOUND_SCHEDULE
     uploaded_file.status = UploadedFile.Status.COMPLETED
