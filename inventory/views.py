@@ -12,7 +12,7 @@ from .services import parse_basic_inventory_workbook, parse_combined_single_shee
 
 
 def dashboard(request):
-    latest_file = UploadedFile.objects.filter(status=UploadedFile.Status.COMPLETED).order_by('-created_at').first()
+    latest_file = UploadedFile.objects.filter(status=UploadedFile.Status.COMPLETED, metrics__isnull=False).distinct().order_by('-created_at').first()
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file) if latest_file else ProductOptionMetric.objects.none()
     summary = list(metrics.values('product_name').annotate(
         option_count=Count('id'),
@@ -22,6 +22,8 @@ def dashboard(request):
         recent_week_sales=Sum('recent_week_sales'),
         total_sales=Sum('total_sales'),
         sales_days=Sum('sales_days'),
+        delivery_qty=Sum('delivery_qty'),
+        pending_qty=Sum('pending_qty'),
     ).order_by('product_name'))
     for row in summary:
         row['current_recent_weeks'] = safe_weeks(row['available_stock'] or 0, row['recent_week_sales'] or 0)
@@ -76,6 +78,23 @@ def upload_inventory(request):
         messages.error(request, f'처리 실패: {exc}')
     return redirect('dashboard')
 
+
+
+
+def product_detail(request, product_name):
+    latest_file = UploadedFile.objects.filter(status=UploadedFile.Status.COMPLETED, metrics__isnull=False).distinct().order_by('-created_at').first()
+    metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file, product_name=product_name) if latest_file else ProductOptionMetric.objects.none()
+    return render(request, 'inventory/product_detail.html', {
+        'product_name': product_name,
+        'metrics': metrics.order_by('option_name'),
+    })
+
+
+def inbound_schedule(request):
+    inbound_schedules = InboundSchedule.objects.filter(is_completed=False).order_by('inbound_date', 'product_name', 'option_name')
+    return render(request, 'inventory/inbound_schedule.html', {
+        'inbound_schedules': inbound_schedules,
+    })
 
 
 def excel_response(df, filename, sheet_name):
