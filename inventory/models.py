@@ -81,3 +81,18 @@ class InboundSchedule(models.Model):
 
     def __str__(self):
         return f'{self.inbound_date or "날짜 미정"} {self.product_name} {self.quantity}'
+
+
+class ProductMaster(models.Model):
+    product_code = models.CharField('상품코드', max_length=120, blank=True)
+    supplier_option_name = models.CharField('공급처옵션명', max_length=120, blank=True)
+    product_name = models.CharField('상품명', max_length=255)
+    option_name = models.CharField('옵션명', max_length=255, blank=True)
+    open_date = models.DateField('오픈일', null=True, blank=True)
+    updated_at = models.DateTimeField('수정 일시', auto_now=True)
+
+    class Meta:
+        ordering = ['product_name', 'option_name']
+
+    def __str__(self):
+        return f'{self.product_name} / {self.option_name}'

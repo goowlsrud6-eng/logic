@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
+from .models import DailyShipment, InboundSchedule, ProductMaster, ProductOptionMetric, UploadedFile
 
 
 @admin.register(UploadedFile)
@@ -28,3 +28,10 @@ class InboundScheduleAdmin(admin.ModelAdmin):
     list_display = ('inbound_date', 'product_name', 'option_name', 'quantity', 'is_completed', 'uploaded_file')
     search_fields = ('product_name', 'option_name', 'product_code')
     list_filter = ('inbound_date', 'is_completed')
+
+
+@admin.register(ProductMaster)
+class ProductMasterAdmin(admin.ModelAdmin):
+    list_display = ('product_name', 'option_name', 'product_code', 'supplier_option_name', 'open_date')
+    search_fields = ('product_name', 'option_name', 'product_code', 'supplier_option_name')
+    list_filter = ('open_date',)

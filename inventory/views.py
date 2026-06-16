@@ -8,7 +8,7 @@ from django.shortcuts import redirect, render
 
 from .forms import UploadInventoryFileForm
 from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
-from .services import parse_basic_inventory_workbook, parse_special_stock_workbook, safe_weeks, sha256_file
+from .services import parse_basic_inventory_workbook, parse_product_master_workbook, parse_special_stock_workbook, safe_weeks, sha256_file
 
 
 def dashboard(request):
@@ -62,6 +62,8 @@ def upload_inventory(request):
     try:
         if form.cleaned_data['upload_mode'] == 'legacy':
             count = parse_special_stock_workbook(record)
+        elif form.cleaned_data['upload_mode'] == 'product_master':
+            count = parse_product_master_workbook(record)
         else:
             count = parse_basic_inventory_workbook(record)
         messages.success(request, f'업로드 완료: {count}개 옵션 데이터를 처리했습니다.')
@@ -71,6 +73,55 @@ def upload_inventory(request):
         record.save(update_fields=['status', 'message'])
         messages.error(request, f'처리 실패: {exc}')
     return redirect('dashboard')
+
+
+
+def excel_response(df, filename, sheet_name):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def download_current_stock_template(request):
+    columns = ['상품코드', '공급처옵션명', '상품명', '옵션', '가용재고', '접수', '송장', '배송', '송장+배송']
+    sample = pd.DataFrame([
+        ['P001', 'SUP-001', '촤르르반팔', '블랙/M', 30, 2, 1, 5, 6],
+        ['P002', 'SUP-002', '냉감이불', '화이트/Q', 80, 0, 0, 3, 3],
+    ], columns=columns)
+    return excel_response(sample, 'current_stock_template.xlsx', '현재고')
+
+
+def download_recent_sales_template(request):
+    columns = ['상품코드', '공급처옵션명', '상품명', '옵션', '수량']
+    sample = pd.DataFrame([
+        ['P001', 'SUP-001', '촤르르반팔', '블랙/M', 10],
+        ['P002', 'SUP-002', '냉감이불', '화이트/Q', 20],
+    ], columns=columns)
+    return excel_response(sample, 'recent_week_sales_template.xlsx', '최근한주판매수량')
+
+
+def download_total_sales_template(request):
+    columns = ['상품코드', '공급처옵션명', '상품명', '옵션', '수량']
+    sample = pd.DataFrame([
+        ['P001', 'SUP-001', '촤르르반팔', '블랙/M', 100],
+        ['P002', 'SUP-002', '냉감이불', '화이트/Q', 300],
+    ], columns=columns)
+    return excel_response(sample, 'total_sales_template.xlsx', '총판매수량')
+
+
+def download_product_master_template(request):
+    columns = ['상품코드', '공급처옵션명', '상품명', '옵션', '오픈일']
+    sample = pd.DataFrame([
+        ['P001', 'SUP-001', '촤르르반팔', '블랙/M', '2026-06-01'],
+        ['P002', 'SUP-002', '냉감이불', '화이트/Q', '2026-05-01'],
+    ], columns=columns)
+    return excel_response(sample, 'product_master_open_date_template.xlsx', '상품기본정보')
 
 
 def download_basic_template(request):

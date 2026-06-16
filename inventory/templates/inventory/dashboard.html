@@ -16,11 +16,17 @@
     <div class="card-body">
       <h2 class="h5">기초파일 업로드</h2>
       <p class="text-muted mb-3">이제 특별재고 파일을 계속 작성하지 않아도 됩니다. 상품명/옵션명/현재고/최근한주수량/총판매수량만 들어간 기초파일을 올리면 자동 계산합니다.</p>
-      <a class="btn btn-outline-secondary btn-sm mb-3" href="{% url 'download_basic_template' %}">기초파일 양식 다운로드</a>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_current_stock_template' %}">현재고양식 다운로드</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_recent_sales_template' %}">최근한주 판매수량 양식</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_total_sales_template' %}">총판매수량 양식</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_product_master_template' %}">상품기본정보/오픈일 양식</a>
+        <a class="btn btn-outline-dark btn-sm" href="{% url 'download_basic_template' %}">통합 기초파일 양식</a>
+      </div>
       <div class="alert alert-info small">
-        <strong>필수 컬럼:</strong> 상품명, 현재고, 최근한주수량, 총판매수량<br>
+        <strong>필수 데이터:</strong> 현재고, 최근한주 판매수량, 총판매수량<br>
         <strong>입고후재고 계산용:</strong> 입고예정일과 입고예정수량을 추가로 입력하세요.<br>
-        <strong>총판매 기준 정확도 향상:</strong> 오픈일 또는 판매일수를 넣으면 됩니다.
+        <strong>오픈일 지정:</strong> 상품기본정보/오픈일 양식에 품목별 오픈일을 한 번 등록하는 방식으로 관리합니다.
       </div>
       <form method="post" action="{% url 'upload_inventory' %}" enctype="multipart/form-data" class="row g-3 align-items-end">
         {% csrf_token %}

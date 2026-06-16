@@ -5,12 +5,13 @@ from pathlib import Path
 import pandas as pd
 from django.utils import timezone
 
-from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
+from .models import DailyShipment, InboundSchedule, ProductMaster, ProductOptionMetric, UploadedFile
 
 WEEK_RE = re.compile(r'(\d{4}-\d{4})')
 
 COLUMN_ALIASES = {
-    'product_code': ['상품코드', '공급처옵션', '이카운트코드'],
+    'product_code': ['상품코드', '이카운트코드'],
+    'supplier_option_name': ['공급처옵션명', '공급처옵션'],
     'product_name': ['상품명', '품목명'],
     'option_name': ['옵션명', '옵션'],
     'available_stock': ['가용재고', '현재고'],
@@ -97,6 +98,61 @@ def judge_stock_status(weeks):
 
 
 
+
+def find_master_open_date(product_code, product_name, option_name):
+    query = ProductMaster.objects.filter(product_name=product_name)
+    if product_code:
+        by_code = query.filter(product_code=product_code).first()
+        if by_code and by_code.open_date:
+            return by_code.open_date
+    by_option = query.filter(option_name=option_name).first()
+    if by_option and by_option.open_date:
+        return by_option.open_date
+    by_product = query.first()
+    return by_product.open_date if by_product else None
+
+
+def parse_product_master_workbook(uploaded_file):
+    path = uploaded_file.file.path
+    excel = pd.ExcelFile(path)
+    sheet_name = excel.sheet_names[0]
+    df = pd.read_excel(path, sheet_name=sheet_name, header=0).dropna(how='all')
+    colmap = build_column_map(df.columns)
+    required = ['product_name']
+    missing = [name for name in required if name not in colmap]
+    if missing:
+        raise ValueError('필수 컬럼이 없습니다: ' + ', '.join(missing))
+
+    count = 0
+    for _, row in df.iterrows():
+        product_name = str(row.get(colmap['product_name'], '') or '').strip()
+        if not product_name:
+            continue
+        product_code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
+        supplier_option_name = str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else ''
+        option_name = clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else ''
+        open_date = None
+        if 'open_date' in colmap:
+            parsed_open_date = pd.to_datetime(row.get(colmap['open_date']), errors='coerce')
+            if pd.notna(parsed_open_date):
+                open_date = parsed_open_date.date()
+        ProductMaster.objects.update_or_create(
+            product_code=product_code,
+            product_name=product_name,
+            option_name=option_name,
+            defaults={
+                'supplier_option_name': supplier_option_name,
+                'open_date': open_date,
+            },
+        )
+        count += 1
+
+    uploaded_file.status = UploadedFile.Status.COMPLETED
+    uploaded_file.message = f'{count}개 상품기본정보를 저장했습니다.'
+    uploaded_file.save(update_fields=['status', 'message'])
+    return count
+
+
 def metrics_from_dataframe(uploaded_file, df, week_label, source_sheet='기초파일'):
     colmap = build_column_map(df.columns)
     required = ['product_name', 'available_stock', 'recent_week_sales', 'total_sales']
@@ -121,6 +177,9 @@ def metrics_from_dataframe(uploaded_file, df, week_label, source_sheet='기초�
         recent_sales = as_number(row.get(colmap['recent_week_sales']))
         total_sales = as_number(row.get(colmap['total_sales']))
         days = as_number(row.get(colmap.get('sales_days'))) if 'sales_days' in colmap else 0
+        master_open_date = find_master_open_date(code, product_name, option_name)
+        if days <= 0 and master_open_date:
+            days = max((timezone.localdate() - master_open_date).days + 1, 1)
         if days <= 0 and 'open_date' in colmap:
             open_date = pd.to_datetime(row.get(colmap['open_date']), errors='coerce')
             if pd.notna(open_date):
@@ -244,6 +303,9 @@ def parse_special_stock_workbook(uploaded_file):
             recent_sales = as_number(row.get(colmap.get('recent_week_sales'))) if 'recent_week_sales' in colmap else 0
             total_sales = as_number(row.get(colmap.get('total_sales'))) if 'total_sales' in colmap else 0
             days = as_number(row.get(colmap.get('sales_days'))) if 'sales_days' in colmap else 0
+        master_open_date = find_master_open_date(code, product_name, option_name)
+        if days <= 0 and master_open_date:
+            days = max((timezone.localdate() - master_open_date).days + 1, 1)
         if days <= 0 and 'open_date' in colmap:
             open_date = pd.to_datetime(row.get(colmap['open_date']), errors='coerce')
             if pd.notna(open_date):
