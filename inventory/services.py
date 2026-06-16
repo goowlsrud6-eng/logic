@@ -172,14 +172,30 @@ def judge_sales_trend(current_weeks, previous_weeks):
     return ''
 
 
-def metric_key(product_code='', supplier_option_name='', product_name='', option_name=''):
+def metric_keys(product_code='', supplier_option_name='', product_name='', option_name=''):
+    keys = []
     supplier = str(supplier_option_name or '').strip()
-    if supplier:
-        return ('supplier', supplier)
     code = str(product_code or '').strip()
+    product = str(product_name or '').strip()
+    normalized_option = normalize_lookup_text(option_name)
+    if supplier:
+        keys.append(('supplier', supplier))
     if code:
-        return ('code', code)
-    return ('name', str(product_name or '').strip(), normalize_lookup_text(option_name))
+        keys.append(('code', code))
+    if product and normalized_option:
+        keys.append(('name', product, normalized_option))
+    return keys or [('name', product, normalized_option)]
+
+
+def metric_key(product_code='', supplier_option_name='', product_name='', option_name=''):
+    return metric_keys(product_code, supplier_option_name, product_name, option_name)[0]
+
+
+def first_lookup(lookup, product_code='', supplier_option_name='', product_name='', option_name='', default=0):
+    for key in metric_keys(product_code, supplier_option_name, product_name, option_name):
+        if key in lookup:
+            return lookup[key]
+    return default
 
 
 def find_master_open_date(product_code, supplier_option_name, product_name, option_name):
@@ -203,26 +219,32 @@ def planned_inbound_by_key():
     ).annotate(quantity=Sum('quantity'))
     result = defaultdict(float)
     for row in rows:
-        result[metric_key(row['product_code'], row['supplier_option_name'], row['product_name'], row['option_name'])] += row['quantity'] or 0
+        for key in metric_keys(row['product_code'], row['supplier_option_name'], row['product_name'], row['option_name']):
+            result[key] += row['quantity'] or 0
     return result
 
 
-def latest_stock_metrics(exclude_file=None):
+def previous_stock_file(current_file):
     qs = UploadedFile.objects.filter(
         status=UploadedFile.Status.COMPLETED,
         file_type__in=[UploadedFile.FileType.STOCK_SALES, UploadedFile.FileType.LEGACY],
         metrics__isnull=False,
-    ).distinct()
-    if exclude_file:
-        qs = qs.exclude(pk=exclude_file.pk)
-    latest = qs.order_by('-reference_date', '-created_at').first()
-    return ProductOptionMetric.objects.filter(uploaded_file=latest) if latest else ProductOptionMetric.objects.none()
+    ).exclude(pk=current_file.pk).distinct()
+    if current_file.reference_date:
+        dated = qs.filter(reference_date__lt=current_file.reference_date).order_by('-reference_date', '-created_at').first()
+        if dated:
+            return dated
+    return qs.filter(created_at__lt=current_file.created_at).order_by('-created_at').first() or qs.order_by('-reference_date', '-created_at').first()
 
 
-def previous_weeks_by_key(current_file):
+def previous_recent_sales_by_key(current_file):
+    previous_file = previous_stock_file(current_file)
     result = {}
-    for row in latest_stock_metrics(exclude_file=current_file):
-        result[metric_key(row.product_code, row.supplier_option_name, row.product_name, row.option_name)] = row.inbound_recent_weeks
+    if not previous_file:
+        return result
+    for row in ProductOptionMetric.objects.filter(uploaded_file=previous_file):
+        for key in metric_keys(row.product_code, row.supplier_option_name, row.product_name, row.option_name):
+            result[key] = row.recent_week_sales
     return result
 
 
@@ -251,7 +273,7 @@ def autofill_supplier_options(items):
     return filled, failed
 
 
-def build_metric(uploaded_file, item, week_label, source_sheet, inbound_qty, previous_weeks):
+def build_metric(uploaded_file, item, week_label, source_sheet, inbound_qty, previous_recent_sales):
     product_code = str(item.get('product_code') or '').strip()
     supplier_option_name = str(item.get('supplier_option_name') or '').strip()
     product_name = str(item.get('product_name') or '').strip()
@@ -270,7 +292,8 @@ def build_metric(uploaded_file, item, week_label, source_sheet, inbound_qty, pre
     inbound_recent = safe_weeks(stock_after, recent_sales)
     current_total = safe_weeks(stock, weekly_total_rate)
     inbound_total = safe_weeks(stock_after, weekly_total_rate)
-    prev_weeks = previous_weeks.get(metric_key(product_code, supplier_option_name, product_name, option_name), 0)
+    prev_sales = first_lookup(previous_recent_sales, product_code, supplier_option_name, product_name, option_name, default=0)
+    prev_weeks = safe_weeks(stock_after, prev_sales)
     return ProductOptionMetric(
         uploaded_file=uploaded_file,
         source_sheet=source_sheet,
@@ -300,7 +323,7 @@ def build_metric(uploaded_file, item, week_label, source_sheet, inbound_qty, pre
 def finish_metric_upload(uploaded_file, items, source_sheet='기초파일'):
     filled, failed = autofill_supplier_options(items)
     inbound_lookup = planned_inbound_by_key()
-    prev_lookup = previous_weeks_by_key(uploaded_file)
+    prev_lookup = previous_recent_sales_by_key(uploaded_file)
     week_label = infer_week_label(uploaded_file.week_label, uploaded_file.file.path, uploaded_file.reference_date)
     rows = []
     shipments = []
@@ -309,8 +332,8 @@ def finish_metric_upload(uploaded_file, items, source_sheet='기초파일'):
         product_name = str(item.get('product_name') or '').strip()
         if not product_name or '합계' in product_name:
             continue
-        key = metric_key(item.get('product_code'), item.get('supplier_option_name'), product_name, item.get('option_name'))
-        metric = build_metric(uploaded_file, item, week_label, source_sheet, inbound_lookup.get(key, 0), prev_lookup)
+        inbound_qty = first_lookup(inbound_lookup, item.get('product_code'), item.get('supplier_option_name'), product_name, item.get('option_name'), default=0)
+        metric = build_metric(uploaded_file, item, week_label, source_sheet, inbound_qty, prev_lookup)
         rows.append(metric)
         if uploaded_file.reference_date and metric.delivery_qty > 0:
             shipments.append(DailyShipment(

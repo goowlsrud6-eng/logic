@@ -12,6 +12,8 @@ from .forms import InboundScheduleForm, MultiUploadInventoryForm
 from .models import InboundSchedule, ProductOptionMetric, UploadedFile
 from .services import (
     infer_week_label,
+    first_lookup,
+    judge_sales_trend,
     metric_key,
     parse_combined_single_sheet_workbook,
     parse_inbound_schedule_workbook,
@@ -19,6 +21,7 @@ from .services import (
     parse_date,
     parse_special_stock_workbook,
     planned_inbound_by_key,
+    previous_recent_sales_by_key,
     safe_weeks,
     sha256_file,
 )
@@ -37,15 +40,17 @@ def latest_stock_file(upload_id=None):
     return base_qs.order_by('-reference_date', '-created_at').first()
 
 
-def live_option_rows(metrics):
+def live_option_rows(metrics, current_file=None):
     inbound_lookup = planned_inbound_by_key()
+    previous_sales_lookup = previous_recent_sales_by_key(current_file) if current_file else {}
     rows = []
     for item in metrics:
-        key = metric_key(item.product_code, item.supplier_option_name, item.product_name, item.option_name)
-        inbound_qty = inbound_lookup.get(key, 0)
+        inbound_qty = first_lookup(inbound_lookup, item.product_code, item.supplier_option_name, item.product_name, item.option_name, default=0)
         stock_after = item.available_stock + inbound_qty
         inbound_recent = safe_weeks(stock_after, item.recent_week_sales)
         weekly_total_rate = (item.total_sales / item.sales_days * 7) if item.total_sales > 0 and item.sales_days > 0 else 0
+        previous_sales = first_lookup(previous_sales_lookup, item.product_code, item.supplier_option_name, item.product_name, item.option_name, default=0)
+        previous_weeks = safe_weeks(stock_after, previous_sales)
         rows.append({
             'id': item.id,
             'product_code': item.product_code,
@@ -65,9 +70,9 @@ def live_option_rows(metrics):
             'inbound_recent_weeks': inbound_recent,
             'current_total_weeks': safe_weeks(item.available_stock, weekly_total_rate),
             'inbound_total_weeks': safe_weeks(stock_after, weekly_total_rate),
-            'previous_inbound_recent_weeks': item.previous_inbound_recent_weeks,
+            'previous_inbound_recent_weeks': previous_weeks or item.previous_inbound_recent_weeks,
             'status': item.status,
-            'sales_trend': item.sales_trend,
+            'sales_trend': judge_sales_trend(inbound_recent, previous_weeks) or item.sales_trend,
         })
     return rows
 
@@ -112,7 +117,7 @@ def summarize_products(option_rows):
 def dashboard(request):
     latest_file = latest_stock_file(request.GET.get('upload_id'))
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file).order_by('product_name', 'option_name') if latest_file else ProductOptionMetric.objects.none()
-    option_rows = live_option_rows(metrics)
+    option_rows = live_option_rows(metrics, latest_file)
     summary = summarize_products(option_rows)
     distribution = {
         '0~4주': sum(1 for row in summary if 0 < row['inbound_recent_weeks'] <= 4),
@@ -189,7 +194,7 @@ def upload_inventory(request):
 def product_detail(request, product_name):
     latest_file = latest_stock_file(request.GET.get('upload_id'))
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file, product_name=product_name).order_by('option_name') if latest_file else ProductOptionMetric.objects.none()
-    option_rows = live_option_rows(metrics)
+    option_rows = live_option_rows(metrics, latest_file)
     return render(request, 'inventory/product_detail.html', {
         'product_name': product_name,
         'metrics': option_rows,
