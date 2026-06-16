@@ -14,14 +14,17 @@
   {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
   <section class="card shadow-sm mb-4">
     <div class="card-body">
-      <h2 class="h5">엑셀 업로드</h2>
+      <h2 class="h5">기초파일 업로드</h2>
+      <p class="text-muted mb-3">이제 특별재고 파일을 계속 작성하지 않아도 됩니다. 상품명/옵션명/현재고/최근한주수량/총판매수량만 들어간 기초파일을 올리면 자동 계산합니다.</p>
+      <a class="btn btn-outline-secondary btn-sm mb-3" href="{% url 'download_basic_template' %}">기초파일 양식 다운로드</a>
       <form method="post" action="{% url 'upload_inventory' %}" enctype="multipart/form-data" class="row g-3 align-items-end">
         {% csrf_token %}
-        <div class="col-md-3">{{ upload_form.week_label.label_tag }} {{ upload_form.week_label }}</div>
-        <div class="col-md-6">{{ upload_form.file.label_tag }} {{ upload_form.file }}</div>
-        <div class="col-md-3"><button class="btn btn-primary w-100" type="submit">업로드 및 계산</button></div>
+        <div class="col-md-3">{{ upload_form.upload_mode.label_tag }} {{ upload_form.upload_mode }}</div>
+        <div class="col-md-2">{{ upload_form.week_label.label_tag }} {{ upload_form.week_label }}</div>
+        <div class="col-md-4">{{ upload_form.file.label_tag }} {{ upload_form.file }}</div>
+        <div class="col-md-3"><button class="btn btn-primary w-100" type="submit">업로드 및 자동 계산</button></div>
       </form>
-      <div class="form-text mt-2">업로드한 원본 파일은 media/uploads 하위에 보관되고, 업로드 이력에서 다시 확인할 수 있습니다.</div>
+      <div class="form-text mt-2">업로드한 원본 기초파일은 media/uploads 하위에 보관되고, 업로드 이력에서 다시 다운로드할 수 있습니다.</div>
     </div>
   </section>
 
@@ -37,12 +40,12 @@
       <h2 class="h5">품목별 요약</h2>
       <div class="table-responsive">
         <table class="table table-sm table-hover align-middle">
-          <thead><tr><th>상품명</th><th>옵션수</th><th>가용재고</th><th>입고예정</th><th>입고후재고</th><th>최근한주판매</th><th>총판매</th></tr></thead>
+          <thead><tr><th>상품명</th><th>옵션수</th><th>현재고</th><th>입고예정</th><th>입고후재고</th><th>최근한주</th><th>총판매</th><th>현재고/최근 기준</th><th>입고후/최근 기준</th><th>현재고/총판매 기준</th><th>입고후/총판매 기준</th></tr></thead>
           <tbody>
           {% for row in summary %}
-            <tr><td>{{ row.product_name }}</td><td>{{ row.option_count }}</td><td>{{ row.available_stock|floatformat:0 }}</td><td>{{ row.inbound_qty|floatformat:0 }}</td><td>{{ row.stock_after_inbound|floatformat:0 }}</td><td>{{ row.recent_week_sales|floatformat:0 }}</td><td>{{ row.total_sales|floatformat:0 }}</td></tr>
+            <tr><td>{{ row.product_name }}</td><td>{{ row.option_count }}</td><td>{{ row.available_stock|floatformat:0 }}</td><td>{{ row.inbound_qty|floatformat:0 }}</td><td>{{ row.stock_after_inbound|floatformat:0 }}</td><td>{{ row.recent_week_sales|floatformat:0 }}</td><td>{{ row.total_sales|floatformat:0 }}</td><td>{{ row.current_recent_weeks|floatformat:1 }}주</td><td>{{ row.inbound_recent_weeks|floatformat:1 }}주</td><td>{{ row.current_total_weeks|floatformat:1 }}주</td><td>{{ row.inbound_total_weeks|floatformat:1 }}주</td></tr>
           {% empty %}
-            <tr><td colspan="7" class="text-center text-muted">아직 처리된 데이터가 없습니다.</td></tr>
+            <tr><td colspan="11" class="text-center text-muted">아직 처리된 데이터가 없습니다.</td></tr>
           {% endfor %}
           </tbody>
         </table>
