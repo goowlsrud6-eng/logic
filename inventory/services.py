@@ -16,8 +16,8 @@ COLUMN_ALIASES = {
     'product_name': ['상품명', '품목명'],
     'option_name': ['옵션명', '옵션'],
     'available_stock': ['가용재고', '현재고'],
-    'inbound_qty': ['총입고예정', '입고예정수량', '입고예정'],
-    'inbound_date': ['입고예정일', '입고일정'],
+    'inbound_qty': ['총입고예정', '입고예정수량', '입고예정', '수량'],
+    'inbound_date': ['입고예정일', '입고일정', '일정'],
     'memo': ['메모', '비고'],
     'delivery_qty': ['배송'],
     'pending_qty': ['미출고', '접수'],
@@ -261,6 +261,52 @@ def find_master_open_date(product_code, product_name, option_name):
         return by_option.open_date
     by_product = query.first()
     return by_product.open_date if by_product else None
+
+
+
+def parse_inbound_schedule_workbook(uploaded_file):
+    path = uploaded_file.file.path
+    excel = pd.ExcelFile(path)
+    sheet_name = excel.sheet_names[0]
+    df = pd.read_excel(path, sheet_name=sheet_name, header=0).dropna(how='all')
+    colmap = build_column_map(df.columns)
+    required = ['product_name', 'inbound_qty']
+    missing = [name for name in required if name not in colmap]
+    if missing:
+        raise ValueError('필수 컬럼이 없습니다: ' + ', '.join(missing))
+
+    inbound_rows = []
+    for _, row in df.iterrows():
+        product_name = str(row.get(colmap['product_name'], '') or '').strip()
+        if not product_name:
+            continue
+        supplier_option_name = str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else ''
+        option_name = clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else ''
+        qty = as_number(row.get(colmap['inbound_qty']))
+        inbound_date = None
+        if 'inbound_date' in colmap:
+            parsed_inbound_date = pd.to_datetime(row.get(colmap['inbound_date']), errors='coerce')
+            if pd.notna(parsed_inbound_date):
+                inbound_date = parsed_inbound_date.date()
+        memo = str(row.get(colmap.get('memo'), '') or '').strip() if 'memo' in colmap else ''
+        if qty <= 0:
+            continue
+        inbound_rows.append(InboundSchedule(
+            uploaded_file=uploaded_file,
+            inbound_date=inbound_date,
+            product_code=supplier_option_name,
+            product_name=product_name,
+            option_name=option_name,
+            quantity=qty,
+            memo=memo,
+        ))
+
+    InboundSchedule.objects.filter(uploaded_file=uploaded_file).delete()
+    InboundSchedule.objects.bulk_create(inbound_rows)
+    uploaded_file.status = UploadedFile.Status.COMPLETED
+    uploaded_file.message = f'{len(inbound_rows)}개 입고예정 일정을 저장했습니다.'
+    uploaded_file.save(update_fields=['status', 'message'])
+    return len(inbound_rows)
 
 
 def parse_product_master_workbook(uploaded_file):

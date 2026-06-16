@@ -8,7 +8,7 @@ from django.shortcuts import redirect, render
 
 from .forms import UploadInventoryFileForm
 from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
-from .services import parse_basic_inventory_workbook, parse_combined_single_sheet_workbook, parse_product_master_workbook, parse_special_stock_workbook, safe_weeks, sha256_file
+from .services import parse_basic_inventory_workbook, parse_combined_single_sheet_workbook, parse_inbound_schedule_workbook, parse_product_master_workbook, parse_special_stock_workbook, safe_weeks, sha256_file
 
 
 def dashboard(request):
@@ -64,6 +64,8 @@ def upload_inventory(request):
             count = parse_special_stock_workbook(record)
         elif form.cleaned_data['upload_mode'] == 'product_master':
             count = parse_product_master_workbook(record)
+        elif form.cleaned_data['upload_mode'] == 'inbound_schedule':
+            count = parse_inbound_schedule_workbook(record)
         else:
             count = parse_combined_single_sheet_workbook(record)
         messages.success(request, f'업로드 완료: {count}개 옵션 데이터를 처리했습니다.')
@@ -124,12 +126,22 @@ def download_product_master_template(request):
     return excel_response(sample, 'product_master_open_date_template.xlsx', '상품기본정보')
 
 
+
+def download_inbound_schedule_template(request):
+    columns = ['공급처옵션명', '상품명', '옵션', '수량', '일정', '비고']
+    sample = pd.DataFrame([
+        ['SUP-001', '촤르르반팔', '블랙/M', 40, '2026-06-19', '1차 입고'],
+        ['SUP-001', '촤르르반팔', '블랙/M', 60, '2026-06-25', '분할 입고'],
+    ], columns=columns)
+    return excel_response(sample, 'inbound_schedule_template.xlsx', '입고예정수량')
+
+
 def download_basic_template(request):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
-        worksheet = workbook.add_worksheet('통합입력')
-        writer.sheets['통합입력'] = worksheet
+        worksheet = workbook.add_worksheet('재고_판매_통합')
+        writer.sheets['재고_판매_통합'] = worksheet
         header_format = workbook.add_format({'bold': True, 'bg_color': '#D9EAF7', 'border': 1})
         section_format = workbook.add_format({'bold': True, 'bg_color': '#FCE4D6'})
 
@@ -146,10 +158,6 @@ def download_basic_template(request):
                 ['P001', 'SUP-001', '촤르르반팔', '블랙/M', 100],
                 ['P002', 'SUP-002', '냉감이불', '화이트/Q', 300],
             ]),
-            (22, '4. 상품기본정보/오픈일', ['상품코드', '공급처옵션명', '상품명', '옵션', '오픈일'], [
-                ['P001', 'SUP-001', '촤르르반팔', '블랙/M', '2026-06-01'],
-                ['P002', 'SUP-002', '냉감이불', '화이트/Q', '2026-05-01'],
-            ]),
         ]
         for start_col, title, headers, rows in sections:
             worksheet.write(0, start_col, title, section_format)
@@ -164,5 +172,5 @@ def download_basic_template(request):
         output.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
-    response['Content-Disposition'] = 'attachment; filename="combined_inventory_template.xlsx"'
+    response['Content-Disposition'] = 'attachment; filename="stock_sales_combined_template.xlsx"'
     return response
