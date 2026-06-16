@@ -36,6 +36,7 @@ UploadInventoryFileForm = MultiUploadInventoryForm
 
 
 class InboundScheduleForm(forms.Form):
+    order_number = forms.CharField(label='발주번호', required=False, max_length=120)
     supplier_option_name = forms.CharField(label='공급처옵션명', required=False, max_length=120)
     product_name = forms.CharField(label='상품명', max_length=255)
     option_name = forms.CharField(label='옵션명', required=False, max_length=255)

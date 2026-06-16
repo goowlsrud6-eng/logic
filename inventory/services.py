@@ -16,6 +16,7 @@ SPECIAL_OPTION_RE = re.compile(r'★\s*\d+\s*차\s*')
 OPTION_NORMALIZE_RE = re.compile(r'[\s/\\_\-\&\(\)\[\]\{\}\.,·]+')
 
 COLUMN_ALIASES = {
+    'order_number': ['발주번호', '발주 No', '발주NO', '오더번호'],
     'product_code': ['상품코드', '이카운트코드'],
     'supplier_option_name': ['공급처옵션명', '공급처옵션'],
     'product_name': ['상품명', '품목명'],
@@ -476,6 +477,7 @@ def parse_inbound_schedule_workbook(uploaded_file):
         if not product_name or qty <= 0:
             continue
         inbound_date = parse_date(row.get(colmap.get('inbound_date')), uploaded_file.reference_date) if 'inbound_date' in colmap else None
+        order_number = str(row.get(colmap.get('order_number'), '') or '').strip() if 'order_number' in colmap else ''
         product_code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
         supplier = str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else ''
         option_name = clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else ''
@@ -487,6 +489,7 @@ def parse_inbound_schedule_workbook(uploaded_file):
             '예정': InboundSchedule.Status.PLANNED,
         }.get(status_label, InboundSchedule.Status.PLANNED)
         base_qs = InboundSchedule.objects.filter(
+            order_number=order_number,
             supplier_option_name=supplier,
             product_name=product_name,
             option_name=option_name,
@@ -499,6 +502,7 @@ def parse_inbound_schedule_workbook(uploaded_file):
 
         defaults = {
             'uploaded_file': uploaded_file,
+            'order_number': order_number,
             'product_code': product_code,
             'inbound_date': inbound_date,
             'quantity': qty,

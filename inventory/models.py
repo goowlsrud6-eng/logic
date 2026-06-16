@@ -83,6 +83,7 @@ class InboundSchedule(models.Model):
         CANCELED = 'canceled', '취소'
 
     uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE, related_name='inbound_schedules')
+    order_number = models.CharField('발주번호', max_length=120, blank=True)
     inbound_date = models.DateField('입고예정일', null=True, blank=True)
     product_code = models.CharField('상품코드', max_length=120, blank=True)
     supplier_option_name = models.CharField('공급처옵션명', max_length=120, blank=True)
@@ -96,7 +97,7 @@ class InboundSchedule(models.Model):
     updated_at = models.DateTimeField('수정 일시', auto_now=True)
 
     class Meta:
-        ordering = ['inbound_date', 'product_name', 'option_name']
+        ordering = ['order_number', 'inbound_date', 'product_name', 'option_name']
 
     def __str__(self):
         return f'{self.inbound_date or "날짜 미정"} {self.product_name} {self.quantity}'

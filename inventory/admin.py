@@ -25,9 +25,9 @@ class DailyShipmentAdmin(admin.ModelAdmin):
 
 @admin.register(InboundSchedule)
 class InboundScheduleAdmin(admin.ModelAdmin):
-    list_display = ('inbound_date', 'product_name', 'option_name', 'supplier_option_name', 'quantity', 'status', 'uploaded_file')
-    search_fields = ('product_name', 'option_name', 'product_code', 'supplier_option_name')
-    list_filter = ('inbound_date', 'status')
+    list_display = ('order_number', 'inbound_date', 'product_name', 'option_name', 'supplier_option_name', 'quantity', 'status', 'uploaded_file')
+    search_fields = ('product_name', 'option_name', 'product_code', 'supplier_option_name', 'order_number')
+    list_filter = ('order_number', 'inbound_date', 'status')
 
 
 @admin.register(ProductMaster)

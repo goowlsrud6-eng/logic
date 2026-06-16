@@ -201,6 +201,25 @@ def inbound_schedule(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         inbound_id = request.POST.get('inbound_id')
+        order_number = request.POST.get('order_number', '').strip()
+        if action == 'bulk_delete' and order_number:
+            deleted, _ = InboundSchedule.objects.filter(order_number=order_number).delete()
+            messages.success(request, f'발주번호 {order_number} 입고예정 {deleted}건을 일괄 삭제했습니다.')
+            return redirect('inbound_schedule')
+        if action == 'bulk_update' and order_number:
+            update_fields = {}
+            inbound_date = parse_date(request.POST.get('bulk_inbound_date'), today)
+            memo = request.POST.get('bulk_memo', '').strip()
+            if request.POST.get('bulk_inbound_date', '').strip():
+                update_fields['inbound_date'] = inbound_date
+            if memo:
+                update_fields['memo'] = memo
+            if update_fields:
+                updated = InboundSchedule.objects.filter(order_number=order_number).update(**update_fields)
+                messages.success(request, f'발주번호 {order_number} 입고예정 {updated}건을 일괄 수정했습니다.')
+            else:
+                messages.error(request, '일괄 수정할 입고예정일 또는 비고를 입력해주세요.')
+            return redirect('inbound_schedule')
         if action == 'delete' and inbound_id:
             InboundSchedule.objects.filter(pk=inbound_id).delete()
             messages.success(request, '입고예정 건을 삭제했습니다.')
@@ -219,6 +238,7 @@ def inbound_schedule(request):
                     status=UploadedFile.Status.COMPLETED,
                     message='화면에서 직접 등록한 입고예정입니다.',
                 ))
+            target.order_number = form.cleaned_data['order_number']
             target.supplier_option_name = form.cleaned_data['supplier_option_name']
             target.product_name = form.cleaned_data['product_name']
             target.option_name = form.cleaned_data['option_name']
@@ -233,9 +253,27 @@ def inbound_schedule(request):
             messages.error(request, '입고예정 입력값을 확인해주세요.')
         return redirect('inbound_schedule')
 
-    inbound_schedules = InboundSchedule.objects.order_by('inbound_date', 'product_name', 'option_name')
+    inbound_schedules = InboundSchedule.objects.order_by('order_number', 'inbound_date', 'product_name', 'option_name')
+    groups = []
+    grouped = defaultdict(lambda: {'option_count': 0, 'quantity': 0, 'inbound_dates': set(), 'memo': ''})
+    for item in inbound_schedules:
+        if not item.order_number:
+            continue
+        group = grouped[item.order_number]
+        group['order_number'] = item.order_number
+        group['option_count'] += 1
+        group['quantity'] += item.quantity or 0
+        if item.inbound_date:
+            group['inbound_dates'].add(item.inbound_date)
+        if item.memo and not group['memo']:
+            group['memo'] = item.memo
+    for group in grouped.values():
+        group['inbound_dates'] = ', '.join(sorted(date.strftime('%Y-%m-%d') for date in group['inbound_dates'])) or '날짜 미정'
+        groups.append(group)
+    groups.sort(key=lambda row: row['order_number'])
     return render(request, 'inventory/inbound_schedule.html', {
         'inbound_schedules': inbound_schedules,
+        'inbound_groups': groups,
         'today': today,
         'inbound_form': InboundScheduleForm(),
     })
@@ -275,10 +313,10 @@ def download_product_master_template(request):
 
 
 def download_inbound_schedule_template(request):
-    columns = ['공급처옵션명', '상품명', '옵션', '수량', '일정', '상태', '비고']
+    columns = ['발주번호', '공급처옵션명', '상품명', '옵션', '수량', '일정', '상태', '비고']
     sample = pd.DataFrame([
-        ['SUP-001', '촤르르반팔', '블랙/M', 40, '2026-06-19', '예정', '1차 입고'],
-        ['SUP-003', '모자', '베이지/F', 100, '', '예정', '발주완료, 일정 미정'],
+        ['2026/05/28-1', 'SUP-001', '촤르르반팔', '블랙/M', 40, '2026-06-19', '예정', '1차 입고'],
+        ['2026/06/10-2', 'SUP-003', '모자', '베이지/F', 100, '', '예정', '발주완료, 일정 미정'],
     ], columns=columns)
     return excel_response(sample, 'inbound_schedule_template.xlsx', '입고예정수량')
 
