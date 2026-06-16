@@ -202,3 +202,10 @@ Python이 설치되어 있지 않거나 PATH 등록이 안 된 상태입니다. 
 ## GitHub에 최신 파일이 안 보일 때
 
 GitHub에 파일 개수가 예전 그대로 보이면 최신 commit이 push/merge되지 않았을 수 있습니다. `GITHUB_SYNC_GUIDE.md`를 참고해서 브랜치, PR, push 상태를 확인하세요.
+
+
+## CMD에서 한글이 깨져 보이는 경우
+
+Windows CMD에서 `.bat` 파일 안의 한글이 깨지면 `내부 또는 외부 명령` 오류가 날 수 있습니다. 그래서 실행용 배치 파일은 영어만 사용하도록 바꿨습니다.
+
+최신 `run_windows_cmd.bat`를 다시 실행하면 `[1/5] Project folder` 같은 영어 단계가 보여야 합니다.
