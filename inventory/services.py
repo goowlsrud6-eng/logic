@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import load_workbook
 from django.utils import timezone
 
 from .models import DailyShipment, InboundSchedule, ProductMaster, ProductOptionMetric, UploadedFile
@@ -97,6 +98,156 @@ def judge_stock_status(weeks):
     return '정상'
 
 
+
+
+
+def make_key(product_code, supplier_option_name, product_name, option_name):
+    return (
+        str(product_code or '').strip(),
+        str(supplier_option_name or '').strip(),
+        str(product_name or '').strip(),
+        str(option_name or '').strip(),
+    )
+
+
+def row_values(ws, row_number, start_col, width):
+    return [ws.cell(row=row_number, column=start_col + idx).value for idx in range(width)]
+
+
+def parse_combined_single_sheet_workbook(uploaded_file):
+    path = uploaded_file.file.path
+    wb = load_workbook(path, data_only=True)
+    ws = wb.active
+    week_label = infer_week_label(uploaded_file.week_label, path)
+    items = {}
+
+    for row_number in range(3, ws.max_row + 1):
+        current = row_values(ws, row_number, 1, 9)
+        recent = row_values(ws, row_number, 11, 5)
+        total = row_values(ws, row_number, 17, 5)
+        master = row_values(ws, row_number, 23, 5)
+
+        if not any(current + recent + total + master):
+            continue
+
+        if any(current):
+            product_code, supplier_option_name, product_name, option_name, stock, pending, invoice, delivery, invoice_delivery = current
+            key = make_key(product_code, supplier_option_name, product_name, option_name)
+            item = items.setdefault(key, {
+                'product_code': product_code,
+                'supplier_option_name': supplier_option_name,
+                'product_name': product_name,
+                'option_name': option_name,
+                'available_stock': 0,
+                'pending_qty': 0,
+                'delivery_qty': 0,
+                'recent_week_sales': 0,
+                'total_sales': 0,
+                'open_date': None,
+            })
+            item['available_stock'] = as_number(stock)
+            item['pending_qty'] = as_number(pending)
+            item['delivery_qty'] = as_number(delivery)
+
+        if any(recent):
+            product_code, supplier_option_name, product_name, option_name, qty = recent
+            key = make_key(product_code, supplier_option_name, product_name, option_name)
+            item = items.setdefault(key, {
+                'product_code': product_code,
+                'supplier_option_name': supplier_option_name,
+                'product_name': product_name,
+                'option_name': option_name,
+                'available_stock': 0,
+                'pending_qty': 0,
+                'delivery_qty': 0,
+                'recent_week_sales': 0,
+                'total_sales': 0,
+                'open_date': None,
+            })
+            item['recent_week_sales'] = as_number(qty)
+
+        if any(total):
+            product_code, supplier_option_name, product_name, option_name, qty = total
+            key = make_key(product_code, supplier_option_name, product_name, option_name)
+            item = items.setdefault(key, {
+                'product_code': product_code,
+                'supplier_option_name': supplier_option_name,
+                'product_name': product_name,
+                'option_name': option_name,
+                'available_stock': 0,
+                'pending_qty': 0,
+                'delivery_qty': 0,
+                'recent_week_sales': 0,
+                'total_sales': 0,
+                'open_date': None,
+            })
+            item['total_sales'] = as_number(qty)
+
+        if any(master):
+            product_code, supplier_option_name, product_name, option_name, open_date = master
+            key = make_key(product_code, supplier_option_name, product_name, option_name)
+            item = items.setdefault(key, {
+                'product_code': product_code,
+                'supplier_option_name': supplier_option_name,
+                'product_name': product_name,
+                'option_name': option_name,
+                'available_stock': 0,
+                'pending_qty': 0,
+                'delivery_qty': 0,
+                'recent_week_sales': 0,
+                'total_sales': 0,
+                'open_date': None,
+            })
+            parsed_open_date = pd.to_datetime(open_date, errors='coerce')
+            if pd.notna(parsed_open_date):
+                item['open_date'] = parsed_open_date.date()
+                ProductMaster.objects.update_or_create(
+                    product_code=str(product_code or '').strip(),
+                    product_name=str(product_name or '').strip(),
+                    option_name=str(option_name or '').strip(),
+                    defaults={
+                        'supplier_option_name': str(supplier_option_name or '').strip(),
+                        'open_date': item['open_date'],
+                    },
+                )
+
+    rows = []
+    for item in items.values():
+        product_name = str(item['product_name'] or '').strip()
+        if not product_name:
+            continue
+        option_name = clean_option_name(item['option_name'] or '')
+        product_code = str(item['product_code'] or '').strip()
+        stock = item['available_stock']
+        recent_sales = item['recent_week_sales']
+        total_sales = item['total_sales']
+        stock_after = stock
+        open_date = item['open_date'] or find_master_open_date(product_code, product_name, option_name)
+        days = max((timezone.localdate() - open_date).days + 1, 1) if open_date else 0
+        weekly_total_rate = (total_sales / days * 7) if total_sales > 0 and days > 0 else 0
+        rows.append(ProductOptionMetric(
+            uploaded_file=uploaded_file,
+            source_sheet=ws.title,
+            week_label=week_label,
+            product_code=product_code,
+            product_name=product_name,
+            option_name=option_name,
+            available_stock=stock,
+            inbound_qty=0,
+            stock_after_inbound=stock_after,
+            delivery_qty=item['delivery_qty'],
+            pending_qty=item['pending_qty'],
+            recent_week_sales=recent_sales,
+            total_sales=total_sales,
+            sales_days=days,
+            current_recent_weeks=safe_weeks(stock, recent_sales),
+            inbound_recent_weeks=safe_weeks(stock_after, recent_sales),
+            current_total_weeks=safe_weeks(stock, weekly_total_rate),
+            inbound_total_weeks=safe_weeks(stock_after, weekly_total_rate),
+            status=judge_stock_status(safe_weeks(stock_after, recent_sales)),
+        ))
+
+    return finish_upload(uploaded_file, rows)
 
 
 def find_master_open_date(product_code, product_name, option_name):

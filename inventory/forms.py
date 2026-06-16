@@ -3,7 +3,7 @@ from django import forms
 
 class UploadInventoryFileForm(forms.Form):
     UPLOAD_MODE_CHOICES = [
-        ('basic', '간단 기초파일: 현재고/최근한주수량/총판매수량만 업로드'),
+        ('basic', '통합 한시트 양식 업로드'),
         ('legacy', '기존 특별재고 파일: 여러 품목 시트가 있는 파일 업로드'),
         ('product_master', '상품기본정보/오픈일 파일 업로드'),
     ]

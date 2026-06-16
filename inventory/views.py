@@ -8,7 +8,7 @@ from django.shortcuts import redirect, render
 
 from .forms import UploadInventoryFileForm
 from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
-from .services import parse_basic_inventory_workbook, parse_product_master_workbook, parse_special_stock_workbook, safe_weeks, sha256_file
+from .services import parse_basic_inventory_workbook, parse_combined_single_sheet_workbook, parse_product_master_workbook, parse_special_stock_workbook, safe_weeks, sha256_file
 
 
 def dashboard(request):
@@ -65,7 +65,7 @@ def upload_inventory(request):
         elif form.cleaned_data['upload_mode'] == 'product_master':
             count = parse_product_master_workbook(record)
         else:
-            count = parse_basic_inventory_workbook(record)
+            count = parse_combined_single_sheet_workbook(record)
         messages.success(request, f'업로드 완료: {count}개 옵션 데이터를 처리했습니다.')
     except Exception as exc:
         record.status = UploadedFile.Status.FAILED
@@ -125,20 +125,44 @@ def download_product_master_template(request):
 
 
 def download_basic_template(request):
-    columns = [
-        '상품코드', '상품명', '옵션명', '현재고', '최근한주수량', '총판매수량',
-        '오픈일', '판매일수', '입고예정일', '입고예정수량', '배송수량', '접수수량'
-    ]
-    sample = pd.DataFrame([
-        ['P001', '촤르르반팔', '블랙/M', 30, 10, 100, '2026-06-01', 30, '2026-06-19', 50, 0, 0],
-        ['P002', '냉감이불', '화이트/Q', 80, 20, 300, '2026-05-01', 45, '', 0, 0, 0],
-    ], columns=columns)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        sample.to_excel(writer, index=False, sheet_name='기초데이터')
+        workbook = writer.book
+        worksheet = workbook.add_worksheet('통합입력')
+        writer.sheets['통합입력'] = worksheet
+        header_format = workbook.add_format({'bold': True, 'bg_color': '#D9EAF7', 'border': 1})
+        section_format = workbook.add_format({'bold': True, 'bg_color': '#FCE4D6'})
+
+        sections = [
+            (0, '1. 현재고양식', ['상품코드', '공급처옵션명', '상품명', '옵션', '가용재고', '접수', '송장', '배송', '송장+배송'], [
+                ['P001', 'SUP-001', '촤르르반팔', '블랙/M', 30, 2, 1, 5, 6],
+                ['P002', 'SUP-002', '냉감이불', '화이트/Q', 80, 0, 0, 3, 3],
+            ]),
+            (10, '2. 최근한주판매수량 양식', ['상품코드', '공급처옵션명', '상품명', '옵션', '수량'], [
+                ['P001', 'SUP-001', '촤르르반팔', '블랙/M', 10],
+                ['P002', 'SUP-002', '냉감이불', '화이트/Q', 20],
+            ]),
+            (16, '3. 총판매수량 양식', ['상품코드', '공급처옵션명', '상품명', '옵션', '수량'], [
+                ['P001', 'SUP-001', '촤르르반팔', '블랙/M', 100],
+                ['P002', 'SUP-002', '냉감이불', '화이트/Q', 300],
+            ]),
+            (22, '4. 상품기본정보/오픈일', ['상품코드', '공급처옵션명', '상품명', '옵션', '오픈일'], [
+                ['P001', 'SUP-001', '촤르르반팔', '블랙/M', '2026-06-01'],
+                ['P002', 'SUP-002', '냉감이불', '화이트/Q', '2026-05-01'],
+            ]),
+        ]
+        for start_col, title, headers, rows in sections:
+            worksheet.write(0, start_col, title, section_format)
+            for col_offset, header in enumerate(headers):
+                worksheet.write(1, start_col + col_offset, header, header_format)
+            for row_offset, row in enumerate(rows, start=2):
+                for col_offset, value in enumerate(row):
+                    worksheet.write(row_offset, start_col + col_offset, value)
+            worksheet.set_column(start_col, start_col + len(headers) - 1, 14)
+
     response = HttpResponse(
         output.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
-    response['Content-Disposition'] = 'attachment; filename="basic_inventory_template.xlsx"'
+    response['Content-Disposition'] = 'attachment; filename="combined_inventory_template.xlsx"'
     return response

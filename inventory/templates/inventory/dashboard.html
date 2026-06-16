@@ -15,13 +15,9 @@
   <section class="card shadow-sm mb-4">
     <div class="card-body">
       <h2 class="h5">기초파일 업로드</h2>
-      <p class="text-muted mb-3">이제 특별재고 파일을 계속 작성하지 않아도 됩니다. 상품명/옵션명/현재고/최근한주수량/총판매수량만 들어간 기초파일을 올리면 자동 계산합니다.</p>
+      <p class="text-muted mb-3">이제 특별재고 파일을 계속 작성하지 않아도 됩니다. 현재고/최근한주 판매수량/총판매수량 영역이 한 시트에 나란히 있는 통합 양식을 올리면 자동 계산합니다.</p>
       <div class="d-flex flex-wrap gap-2 mb-3">
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_current_stock_template' %}">현재고양식 다운로드</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_recent_sales_template' %}">최근한주 판매수량 양식</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_total_sales_template' %}">총판매수량 양식</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'download_product_master_template' %}">상품기본정보/오픈일 양식</a>
-        <a class="btn btn-outline-dark btn-sm" href="{% url 'download_basic_template' %}">통합 기초파일 양식</a>
+        <a class="btn btn-outline-dark btn-sm" href="{% url 'download_basic_template' %}">통합 한시트 양식 다운로드</a>
       </div>
       <div class="alert alert-info small">
         <strong>필수 데이터:</strong> 현재고, 최근한주 판매수량, 총판매수량<br>
