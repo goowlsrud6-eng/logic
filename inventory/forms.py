@@ -1,30 +1,35 @@
 from django import forms
 
 
-class UploadInventoryFileForm(forms.Form):
-    UPLOAD_MODE_CHOICES = [
-        ('basic', '통합 한시트 양식 업로드'),
-        ('legacy', '기존 특별재고 파일: 여러 품목 시트가 있는 파일 업로드'),
-        ('product_master', '상품기본정보/오픈일 파일 업로드'),
-        ('inbound_schedule', '입고예정수량 파일 업로드'),
-    ]
-
-    upload_mode = forms.ChoiceField(
-        label='업로드 방식',
-        choices=UPLOAD_MODE_CHOICES,
-        initial='basic',
-        help_text='앞으로는 간단 기초파일 방식을 기본으로 사용합니다.',
-    )
+class MultiUploadInventoryForm(forms.Form):
     reference_date = forms.DateField(
-        label='작성/기준일',
+        label='기준일',
         required=False,
-        widget=forms.DateInput(attrs={'type': 'date'}),
-        help_text='예: 2026-06-15. 배송수량은 이 날짜의 기록으로 저장됩니다.',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        help_text='예: 2026-06-15. 입력하면 0615-0619 주차가 자동 생성됩니다.',
     )
-    week_label = forms.CharField(
-        label='기준 주차',
+    stock_sales_file = forms.FileField(
+        label='1. 재고/판매 통합 파일',
         required=False,
-        max_length=20,
-        help_text='예: 0615-0619. 비워도 됩니다.',
+        widget=forms.FileInput(attrs={'class': 'form-control'}),
     )
-    file = forms.FileField(label='엑셀 파일')
+    product_master_file = forms.FileField(
+        label='2. 상품기본정보/오픈일 파일',
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-control'}),
+    )
+    inbound_schedule_file = forms.FileField(
+        label='3. 입고예정 파일',
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-control'}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        if not any(cleaned.get(name) for name in ['stock_sales_file', 'product_master_file', 'inbound_schedule_file']):
+            raise forms.ValidationError('업로드할 파일을 하나 이상 선택해주세요.')
+        return cleaned
+
+
+# 이전 코드/문서와의 호환을 위해 이름은 남겨둔다.
+UploadInventoryFileForm = MultiUploadInventoryForm

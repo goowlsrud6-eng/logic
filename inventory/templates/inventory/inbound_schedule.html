@@ -4,7 +4,7 @@
 <main class="container-fluid py-4">
   <ul class="nav nav-tabs mb-3"><li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">요약 페이지</a></li><li class="nav-item"><a class="nav-link active" href="{% url 'inbound_schedule' %}">입고일정</a></li></ul>
   <div class="card shadow-sm"><div class="card-body"><h2 class="h5">입고예정 일정</h2><div class="table-responsive"><table class="table table-sm table-bordered text-center align-middle">
-    <thead class="table-light"><tr><th>입고예정일</th><th>공급처옵션</th><th>상품명</th><th>옵션</th><th>수량</th><th>비고</th><th>등록일</th></tr></thead>
-    <tbody>{% for inbound in inbound_schedules %}<tr><td>{{ inbound.inbound_date|default:'날짜 미정' }}</td><td>{{ inbound.product_code }}</td><td class="text-start">{{ inbound.product_name }}</td><td>{{ inbound.option_name }}</td><td>{{ inbound.quantity|floatformat:0 }}</td><td class="text-start">{{ inbound.memo }}</td><td>{{ inbound.created_at|date:'Y-m-d H:i' }}</td></tr>{% empty %}<tr><td colspan="7" class="text-muted">입고예정이 없습니다.</td></tr>{% endfor %}</tbody>
+    <thead class="table-light"><tr><th>입고예정일</th><th>공급처옵션</th><th>상품명</th><th>옵션</th><th>수량</th><th>상태</th><th>지연여부</th><th>비고</th><th>등록일</th></tr></thead>
+    <tbody>{% for inbound in inbound_schedules %}<tr><td>{{ inbound.inbound_date|default:'날짜 미정' }}</td><td>{{ inbound.supplier_option_name }}</td><td class="text-start">{{ inbound.product_name }}</td><td>{{ inbound.option_name }}</td><td>{{ inbound.quantity|floatformat:0 }}</td><td>{{ inbound.get_status_display }}</td><td>{% if inbound.status == 'planned' and inbound.inbound_date and inbound.inbound_date < today %}<span class="badge text-bg-danger">입고지연</span>{% else %}-{% endif %}</td><td class="text-start">{{ inbound.memo }}</td><td>{{ inbound.created_at|date:'Y-m-d H:i' }}</td></tr>{% empty %}<tr><td colspan="9" class="text-muted">입고예정이 없습니다.</td></tr>{% endfor %}</tbody>
   </table></div></div></div>
 </main></body></html>

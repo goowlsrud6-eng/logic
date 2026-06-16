@@ -2,6 +2,12 @@ from django.db import models
 
 
 class UploadedFile(models.Model):
+    class FileType(models.TextChoices):
+        STOCK_SALES = 'stock_sales', '재고/판매 통합'
+        PRODUCT_MASTER = 'product_master', '상품기본정보/오픈일'
+        INBOUND_SCHEDULE = 'inbound_schedule', '입고예정'
+        LEGACY = 'legacy', '기존 특별재고'
+
     class Status(models.TextChoices):
         PENDING = 'pending', '처리 대기'
         COMPLETED = 'completed', '처리 완료'
@@ -10,6 +16,7 @@ class UploadedFile(models.Model):
     original_name = models.CharField('원본 파일명', max_length=255)
     file = models.FileField('보관 파일', upload_to='uploads/%Y/%m/%d/')
     file_hash = models.CharField('파일 해시', max_length=64, blank=True)
+    file_type = models.CharField('파일 종류', max_length=30, choices=FileType.choices, default=FileType.STOCK_SALES)
     week_label = models.CharField('기준 주차', max_length=20, blank=True, help_text='예: 0615-0619')
     reference_date = models.DateField('작성/기준일', null=True, blank=True)
     status = models.CharField('처리 상태', max_length=20, choices=Status.choices, default=Status.PENDING)
@@ -17,14 +24,15 @@ class UploadedFile(models.Model):
     created_at = models.DateTimeField('업로드 일시', auto_now_add=True)
 
     def __str__(self):
-        return f'{self.original_name} ({self.week_label or "주차 미지정"})'
+        return f'{self.original_name} ({self.get_file_type_display()})'
 
 
 class ProductOptionMetric(models.Model):
     uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE, related_name='metrics')
     source_sheet = models.CharField('원본 시트명', max_length=120, blank=True)
     week_label = models.CharField('기준 주차', max_length=20, blank=True)
-    product_code = models.CharField('상품코드/공급처옵션', max_length=120, blank=True)
+    product_code = models.CharField('상품코드', max_length=120, blank=True)
+    supplier_option_name = models.CharField('공급처옵션명', max_length=120, blank=True)
     product_name = models.CharField('상품명', max_length=255)
     option_name = models.CharField('옵션명', max_length=255, blank=True)
     available_stock = models.FloatField('가용재고', default=0)
@@ -40,7 +48,9 @@ class ProductOptionMetric(models.Model):
     inbound_recent_weeks = models.FloatField('입고포함 최근한주 판매가능주', default=0)
     current_total_weeks = models.FloatField('현재고 기준 총판매 판매가능주', default=0)
     inbound_total_weeks = models.FloatField('입고포함 총판매 판매가능주', default=0)
+    previous_inbound_recent_weeks = models.FloatField('지난주 기준 판매가능주', default=0)
     status = models.CharField('재고 상태', max_length=30, blank=True)
+    sales_trend = models.CharField('판매 상승/하락 상태', max_length=30, blank=True)
 
     class Meta:
         ordering = ['product_name', 'option_name']
@@ -52,7 +62,8 @@ class ProductOptionMetric(models.Model):
 class DailyShipment(models.Model):
     uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE, related_name='shipments')
     delivery_date = models.DateField('배송 기준일')
-    product_code = models.CharField('상품코드/공급처옵션', max_length=120, blank=True)
+    product_code = models.CharField('상품코드', max_length=120, blank=True)
+    supplier_option_name = models.CharField('공급처옵션명', max_length=120, blank=True)
     product_name = models.CharField('상품명', max_length=255)
     option_name = models.CharField('옵션명', max_length=255, blank=True)
     quantity = models.FloatField('배송수량', default=0)
@@ -66,15 +77,23 @@ class DailyShipment(models.Model):
 
 
 class InboundSchedule(models.Model):
+    class Status(models.TextChoices):
+        PLANNED = 'planned', '예정'
+        COMPLETED = 'completed', '완료'
+        CANCELED = 'canceled', '취소'
+
     uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE, related_name='inbound_schedules')
     inbound_date = models.DateField('입고예정일', null=True, blank=True)
-    product_code = models.CharField('상품코드/공급처옵션', max_length=120, blank=True)
+    product_code = models.CharField('상품코드', max_length=120, blank=True)
+    supplier_option_name = models.CharField('공급처옵션명', max_length=120, blank=True)
     product_name = models.CharField('상품명', max_length=255)
     option_name = models.CharField('옵션명', max_length=255, blank=True)
     quantity = models.FloatField('입고예정수량', default=0)
     memo = models.CharField('메모', max_length=255, blank=True)
+    status = models.CharField('상태', max_length=20, choices=Status.choices, default=Status.PLANNED)
     is_completed = models.BooleanField('입고완료 여부', default=False)
     created_at = models.DateTimeField('등록 일시', auto_now_add=True)
+    updated_at = models.DateTimeField('수정 일시', auto_now=True)
 
     class Meta:
         ordering = ['inbound_date', 'product_name', 'option_name']

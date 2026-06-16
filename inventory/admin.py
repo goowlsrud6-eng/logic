@@ -4,30 +4,30 @@ from .models import DailyShipment, InboundSchedule, ProductMaster, ProductOption
 
 @admin.register(UploadedFile)
 class UploadedFileAdmin(admin.ModelAdmin):
-    list_display = ('original_name', 'week_label', 'reference_date', 'status', 'created_at')
+    list_display = ('original_name', 'file_type', 'week_label', 'reference_date', 'status', 'created_at')
     search_fields = ('original_name', 'week_label', 'file_hash')
-    list_filter = ('status', 'created_at')
+    list_filter = ('file_type', 'status', 'created_at')
 
 
 @admin.register(ProductOptionMetric)
 class ProductOptionMetricAdmin(admin.ModelAdmin):
-    list_display = ('product_name', 'option_name', 'week_label', 'available_stock', 'recent_week_sales', 'inbound_recent_weeks', 'status')
-    search_fields = ('product_name', 'option_name', 'product_code')
-    list_filter = ('week_label', 'status')
+    list_display = ('product_name', 'option_name', 'supplier_option_name', 'week_label', 'available_stock', 'recent_week_sales', 'inbound_recent_weeks', 'sales_trend')
+    search_fields = ('product_name', 'option_name', 'product_code', 'supplier_option_name')
+    list_filter = ('week_label', 'status', 'sales_trend')
 
 
 @admin.register(DailyShipment)
 class DailyShipmentAdmin(admin.ModelAdmin):
     list_display = ('delivery_date', 'product_name', 'option_name', 'quantity', 'uploaded_file')
-    search_fields = ('product_name', 'option_name', 'product_code')
+    search_fields = ('product_name', 'option_name', 'product_code', 'supplier_option_name')
     list_filter = ('delivery_date',)
 
 
 @admin.register(InboundSchedule)
 class InboundScheduleAdmin(admin.ModelAdmin):
-    list_display = ('inbound_date', 'product_name', 'option_name', 'quantity', 'is_completed', 'uploaded_file')
-    search_fields = ('product_name', 'option_name', 'product_code')
-    list_filter = ('inbound_date', 'is_completed')
+    list_display = ('inbound_date', 'product_name', 'option_name', 'supplier_option_name', 'quantity', 'status', 'uploaded_file')
+    search_fields = ('product_name', 'option_name', 'product_code', 'supplier_option_name')
+    list_filter = ('inbound_date', 'status')
 
 
 @admin.register(ProductMaster)
