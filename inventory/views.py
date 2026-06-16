@@ -132,6 +132,7 @@ def download_inbound_schedule_template(request):
     sample = pd.DataFrame([
         ['SUP-001', '촤르르반팔', '블랙/M', 40, '2026-06-19', '1차 입고'],
         ['SUP-001', '촤르르반팔', '블랙/M', 60, '2026-06-25', '분할 입고'],
+        ['SUP-003', '모자', '베이지/F', 100, '', '발주완료, 일정 미정'],
     ], columns=columns)
     return excel_response(sample, 'inbound_schedule_template.xlsx', '입고예정수량')
 
