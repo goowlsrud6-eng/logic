@@ -1,10 +1,10 @@
 from django.contrib import admin
-from .models import ProductOptionMetric, UploadedFile
+from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
 
 
 @admin.register(UploadedFile)
 class UploadedFileAdmin(admin.ModelAdmin):
-    list_display = ('original_name', 'week_label', 'status', 'created_at')
+    list_display = ('original_name', 'week_label', 'reference_date', 'status', 'created_at')
     search_fields = ('original_name', 'week_label', 'file_hash')
     list_filter = ('status', 'created_at')
 
@@ -14,3 +14,17 @@ class ProductOptionMetricAdmin(admin.ModelAdmin):
     list_display = ('product_name', 'option_name', 'week_label', 'available_stock', 'recent_week_sales', 'inbound_recent_weeks', 'status')
     search_fields = ('product_name', 'option_name', 'product_code')
     list_filter = ('week_label', 'status')
+
+
+@admin.register(DailyShipment)
+class DailyShipmentAdmin(admin.ModelAdmin):
+    list_display = ('delivery_date', 'product_name', 'option_name', 'quantity', 'uploaded_file')
+    search_fields = ('product_name', 'option_name', 'product_code')
+    list_filter = ('delivery_date',)
+
+
+@admin.register(InboundSchedule)
+class InboundScheduleAdmin(admin.ModelAdmin):
+    list_display = ('inbound_date', 'product_name', 'option_name', 'quantity', 'is_completed', 'uploaded_file')
+    search_fields = ('product_name', 'option_name', 'product_code')
+    list_filter = ('inbound_date', 'is_completed')

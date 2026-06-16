@@ -13,6 +13,12 @@ class UploadInventoryFileForm(forms.Form):
         initial='basic',
         help_text='앞으로는 간단 기초파일 방식을 기본으로 사용합니다.',
     )
+    reference_date = forms.DateField(
+        label='작성/기준일',
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        help_text='예: 2026-06-15. 배송수량은 이 날짜의 기록으로 저장됩니다.',
+    )
     week_label = forms.CharField(
         label='기준 주차',
         required=False,

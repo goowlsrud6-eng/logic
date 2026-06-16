@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from django.utils import timezone
 
-from .models import ProductOptionMetric, UploadedFile
+from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
 
 WEEK_RE = re.compile(r'(\d{4}-\d{4})')
 
@@ -15,6 +15,8 @@ COLUMN_ALIASES = {
     'option_name': ['옵션명', '옵션'],
     'available_stock': ['가용재고', '현재고'],
     'inbound_qty': ['총입고예정', '입고예정수량', '입고예정'],
+    'inbound_date': ['입고예정일', '입고일정'],
+    'memo': ['메모', '비고'],
     'delivery_qty': ['배송'],
     'pending_qty': ['미출고', '접수'],
     'recent_week_sales': ['판매수량최근한주', '최근한주판매수량', '최근한주수량'],
@@ -111,6 +113,11 @@ def metrics_from_dataframe(uploaded_file, df, week_label, source_sheet='기초�
         code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
         stock = as_number(row.get(colmap['available_stock']))
         inbound = as_number(row.get(colmap.get('inbound_qty'))) if 'inbound_qty' in colmap else 0
+        inbound_date = None
+        if 'inbound_date' in colmap:
+            parsed_inbound_date = pd.to_datetime(row.get(colmap['inbound_date']), errors='coerce')
+            if pd.notna(parsed_inbound_date):
+                inbound_date = parsed_inbound_date.date()
         recent_sales = as_number(row.get(colmap['recent_week_sales']))
         total_sales = as_number(row.get(colmap['total_sales']))
         days = as_number(row.get(colmap.get('sales_days'))) if 'sales_days' in colmap else 0
@@ -134,6 +141,7 @@ def metrics_from_dataframe(uploaded_file, df, week_label, source_sheet='기초�
             option_name=option_name,
             available_stock=stock,
             inbound_qty=inbound,
+            inbound_date=inbound_date,
             stock_after_inbound=stock_after,
             delivery_qty=as_number(row.get(colmap.get('delivery_qty'))) if 'delivery_qty' in colmap else 0,
             pending_qty=as_number(row.get(colmap.get('pending_qty'))) if 'pending_qty' in colmap else 0,
@@ -151,7 +159,32 @@ def metrics_from_dataframe(uploaded_file, df, week_label, source_sheet='기초�
 
 def finish_upload(uploaded_file, rows):
     ProductOptionMetric.objects.filter(uploaded_file=uploaded_file).delete()
+    DailyShipment.objects.filter(uploaded_file=uploaded_file).delete()
+    InboundSchedule.objects.filter(uploaded_file=uploaded_file).delete()
     ProductOptionMetric.objects.bulk_create(rows)
+    shipment_rows = []
+    inbound_rows = []
+    for row in rows:
+        if uploaded_file.reference_date and row.delivery_qty > 0:
+            shipment_rows.append(DailyShipment(
+                uploaded_file=uploaded_file,
+                delivery_date=uploaded_file.reference_date,
+                product_code=row.product_code,
+                product_name=row.product_name,
+                option_name=row.option_name,
+                quantity=row.delivery_qty,
+            ))
+        if row.inbound_qty > 0:
+            inbound_rows.append(InboundSchedule(
+                uploaded_file=uploaded_file,
+                inbound_date=row.inbound_date,
+                product_code=row.product_code,
+                product_name=row.product_name,
+                option_name=row.option_name,
+                quantity=row.inbound_qty,
+            ))
+    DailyShipment.objects.bulk_create(shipment_rows)
+    InboundSchedule.objects.bulk_create(inbound_rows)
     uploaded_file.status = UploadedFile.Status.COMPLETED
     uploaded_file.message = f'{len(rows)}개 옵션 데이터를 처리했습니다.'
     uploaded_file.save(update_fields=['status', 'message'])
@@ -203,6 +236,11 @@ def parse_special_stock_workbook(uploaded_file):
             code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
             stock = as_number(row.get(colmap['available_stock']))
             inbound = as_number(row.get(colmap.get('inbound_qty'))) if 'inbound_qty' in colmap else 0
+        inbound_date = None
+        if 'inbound_date' in colmap:
+            parsed_inbound_date = pd.to_datetime(row.get(colmap['inbound_date']), errors='coerce')
+            if pd.notna(parsed_inbound_date):
+                inbound_date = parsed_inbound_date.date()
             recent_sales = as_number(row.get(colmap.get('recent_week_sales'))) if 'recent_week_sales' in colmap else 0
             total_sales = as_number(row.get(colmap.get('total_sales'))) if 'total_sales' in colmap else 0
             days = as_number(row.get(colmap.get('sales_days'))) if 'sales_days' in colmap else 0

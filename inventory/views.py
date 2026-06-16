@@ -7,7 +7,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 
 from .forms import UploadInventoryFileForm
-from .models import ProductOptionMetric, UploadedFile
+from .models import DailyShipment, InboundSchedule, ProductOptionMetric, UploadedFile
 from .services import parse_basic_inventory_workbook, parse_special_stock_workbook, safe_weeks, sha256_file
 
 
@@ -37,6 +37,8 @@ def dashboard(request):
         'urgent_count': metrics.filter(status='긴급').count(),
         'upload_form': UploadInventoryFileForm(),
         'uploads': UploadedFile.objects.order_by('-created_at')[:10],
+        'shipments': DailyShipment.objects.order_by('-delivery_date', 'product_name')[:20],
+        'inbound_schedules': InboundSchedule.objects.filter(is_completed=False).order_by('inbound_date', 'product_name')[:20],
     }
     return render(request, 'inventory/dashboard.html', context)
 
@@ -55,6 +57,7 @@ def upload_inventory(request):
         file=uploaded,
         file_hash=sha256_file(uploaded),
         week_label=form.cleaned_data['week_label'],
+        reference_date=form.cleaned_data['reference_date'],
     )
     try:
         if form.cleaned_data['upload_mode'] == 'legacy':
@@ -73,11 +76,11 @@ def upload_inventory(request):
 def download_basic_template(request):
     columns = [
         '상품코드', '상품명', '옵션명', '현재고', '최근한주수량', '총판매수량',
-        '오픈일', '판매일수', '입고예정수량', '배송수량', '접수수량'
+        '오픈일', '판매일수', '입고예정일', '입고예정수량', '배송수량', '접수수량'
     ]
     sample = pd.DataFrame([
-        ['P001', '촤르르반팔', '블랙/M', 30, 10, 100, '2026-06-01', 30, 50, 0, 0],
-        ['P002', '냉감이불', '화이트/Q', 80, 20, 300, '2026-05-01', 45, 0, 0, 0],
+        ['P001', '촤르르반팔', '블랙/M', 30, 10, 100, '2026-06-01', 30, '2026-06-19', 50, 0, 0],
+        ['P002', '냉감이불', '화이트/Q', 80, 20, 300, '2026-05-01', 45, '', 0, 0, 0],
     ], columns=columns)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:

@@ -19,15 +19,16 @@
       <a class="btn btn-outline-secondary btn-sm mb-3" href="{% url 'download_basic_template' %}">기초파일 양식 다운로드</a>
       <div class="alert alert-info small">
         <strong>필수 컬럼:</strong> 상품명, 현재고, 최근한주수량, 총판매수량<br>
-        <strong>입고후재고 계산용:</strong> 입고예정수량을 추가로 입력하세요.<br>
+        <strong>입고후재고 계산용:</strong> 입고예정일과 입고예정수량을 추가로 입력하세요.<br>
         <strong>총판매 기준 정확도 향상:</strong> 오픈일 또는 판매일수를 넣으면 됩니다.
       </div>
       <form method="post" action="{% url 'upload_inventory' %}" enctype="multipart/form-data" class="row g-3 align-items-end">
         {% csrf_token %}
         <div class="col-md-3">{{ upload_form.upload_mode.label_tag }} {{ upload_form.upload_mode }}</div>
+        <div class="col-md-2">{{ upload_form.reference_date.label_tag }} {{ upload_form.reference_date }}</div>
         <div class="col-md-2">{{ upload_form.week_label.label_tag }} {{ upload_form.week_label }}</div>
-        <div class="col-md-4">{{ upload_form.file.label_tag }} {{ upload_form.file }}</div>
-        <div class="col-md-3"><button class="btn btn-primary w-100" type="submit">업로드 및 자동 계산</button></div>
+        <div class="col-md-3">{{ upload_form.file.label_tag }} {{ upload_form.file }}</div>
+        <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">업로드 및 자동 계산</button></div>
       </form>
       <div class="form-text mt-2">업로드한 원본 기초파일은 media/uploads 하위에 보관되고, 업로드 이력에서 다시 다운로드할 수 있습니다.</div>
     </div>
@@ -55,6 +56,28 @@
           </tbody>
         </table>
       </div>
+    </div>
+  </section>
+
+
+  <section class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100"><div class="card-body">
+        <h2 class="h5">최근 배송 기록</h2>
+        <div class="table-responsive"><table class="table table-sm">
+          <thead><tr><th>배송일</th><th>상품명</th><th>옵션</th><th>수량</th></tr></thead><tbody>
+          {% for shipment in shipments %}<tr><td>{{ shipment.delivery_date }}</td><td>{{ shipment.product_name }}</td><td>{{ shipment.option_name }}</td><td>{{ shipment.quantity|floatformat:0 }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">배송 기록이 없습니다.</td></tr>{% endfor %}
+          </tbody></table></div>
+      </div></div>
+    </div>
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100"><div class="card-body">
+        <h2 class="h5">입고예정 일정</h2>
+        <div class="table-responsive"><table class="table table-sm">
+          <thead><tr><th>입고예정일</th><th>상품명</th><th>옵션</th><th>수량</th></tr></thead><tbody>
+          {% for inbound in inbound_schedules %}<tr><td>{{ inbound.inbound_date|default:'날짜 미정' }}</td><td>{{ inbound.product_name }}</td><td>{{ inbound.option_name }}</td><td>{{ inbound.quantity|floatformat:0 }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">입고예정이 없습니다.</td></tr>{% endfor %}
+          </tbody></table></div>
+      </div></div>
     </div>
   </section>
 
