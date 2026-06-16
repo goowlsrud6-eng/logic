@@ -1,4 +1,5 @@
 <!doctype html>
+{% load inventory_format %}
 <html lang="ko">
 <head>
   <meta charset="utf-8">
@@ -66,7 +67,7 @@
           <thead class="table-light"><tr><th>품목명</th><th>현재고</th><th>입고예정수량</th><th>입고후재고</th><th>배송</th><th>미출고수량(접수)</th><th>최근한주 판매</th><th>총판매</th><th>총판매 기준 현재고</th><th>총판매 기준 입고포함</th><th>최근한주 기준 현재고</th><th>최근한주 기준 입고포함</th><th>판매상태</th></tr></thead>
           <tbody>
           {% for row in summary %}
-            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|floatformat:0 }}</td><td>{{ row.inbound_qty|floatformat:0 }}</td><td>{{ row.stock_after_inbound|floatformat:0 }}</td><td>{{ row.delivery_qty|floatformat:0 }}</td><td>{{ row.pending_qty|floatformat:0 }}</td><td>{{ row.recent_week_sales|floatformat:0 }}</td><td>{{ row.total_sales|floatformat:0 }}</td><td>{{ row.current_total_weeks|floatformat:1 }}</td><td>{{ row.inbound_total_weeks|floatformat:1 }}</td><td>{{ row.current_recent_weeks|floatformat:1 }}</td><td>{{ row.inbound_recent_weeks|floatformat:1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
+            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
           {% empty %}
             <tr><td colspan="13" class="text-muted">아직 처리된 재고/판매 데이터가 없습니다.</td></tr>
           {% endfor %}
