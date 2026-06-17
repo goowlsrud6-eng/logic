@@ -145,12 +145,38 @@ def summarize_products(option_rows):
     return sorted(summary, key=lambda r: r['product_name'])
 
 
+def card_product_items(summary, card_filter):
+    labels = {
+        'under4': '4주 이하 품목',
+        'under8': '8주 이하 품목',
+        'surge': '판매 급상승 품목',
+        'drop': '판매 급하락 품목',
+    }
+    if card_filter == 'under4':
+        rows = [row for row in summary if 0 < row['inbound_recent_weeks'] <= 4]
+        rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
+    elif card_filter == 'under8':
+        rows = [row for row in summary if 0 < row['inbound_recent_weeks'] <= 8]
+        rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
+    elif card_filter == 'surge':
+        rows = [row for row in summary if row['sales_trend'] == '판매 급상승']
+        rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
+    elif card_filter == 'drop':
+        rows = [row for row in summary if row['sales_trend'] == '판매 급하락']
+        rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999, reverse=True)
+    else:
+        return '', []
+    return labels[card_filter], rows
+
+
 def dashboard(request):
     latest_file = latest_stock_file(request.GET.get('upload_id'))
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file).order_by('product_name', 'option_name') if latest_file else ProductOptionMetric.objects.none()
     option_rows = live_option_rows(metrics, latest_file)
     summary = summarize_products(option_rows)
-    all_summary = summary
+    all_summary = list(summary)
+    card_filter = request.GET.get('card', '').strip()
+    card_title, card_items = card_product_items(all_summary, card_filter)
     search_query = request.GET.get('q', '').strip()
     trend_filter = request.GET.get('trend', '').strip()
     inbound_filter = request.GET.get('inbound', '').strip()
@@ -164,26 +190,29 @@ def dashboard(request):
     elif inbound_filter == 'no':
         summary = [row for row in summary if row['inbound_qty'] <= 0]
     distribution = {
-        '0~4주': sum(1 for row in summary if 0 < row['inbound_recent_weeks'] <= 4),
-        '4~8주': sum(1 for row in summary if 4 < row['inbound_recent_weeks'] <= 8),
-        '8~12주': sum(1 for row in summary if 8 < row['inbound_recent_weeks'] <= 12),
-        '12주 이상': sum(1 for row in summary if row['inbound_recent_weeks'] > 12),
+        '0~4주': sum(1 for row in all_summary if 0 < row['inbound_recent_weeks'] <= 4),
+        '4~8주': sum(1 for row in all_summary if 4 < row['inbound_recent_weeks'] <= 8),
+        '8~12주': sum(1 for row in all_summary if 8 < row['inbound_recent_weeks'] <= 12),
+        '12주 이상': sum(1 for row in all_summary if row['inbound_recent_weeks'] > 12),
     }
     planned_inbound_products = set(InboundSchedule.objects.filter(status=InboundSchedule.Status.PLANNED).values_list('product_name', flat=True))
     context = {
         'latest_file': latest_file,
         'summary': summary,
-        'total_products': len(summary),
+        'card_filter': card_filter,
+        'card_title': card_title,
+        'card_items': card_items,
+        'total_products': len(all_summary),
         'total_options': len(option_rows),
-        'under_4_count': sum(1 for row in summary if 0 < row['inbound_recent_weeks'] <= 4),
-        'under_8_count': sum(1 for row in summary if 0 < row['inbound_recent_weeks'] <= 8),
-        'surge_count': sum(1 for row in summary if row['sales_trend'] == '판매 급상승'),
-        'drop_count': sum(1 for row in summary if row['sales_trend'] == '판매 급하락'),
-        'no_inbound_count': sum(1 for row in summary if row['product_name'] not in planned_inbound_products),
-        'risk_count': sum(1 for row in summary if 0 < row['inbound_recent_weeks'] <= 4),
+        'under_4_count': sum(1 for row in all_summary if 0 < row['inbound_recent_weeks'] <= 4),
+        'under_8_count': sum(1 for row in all_summary if 0 < row['inbound_recent_weeks'] <= 8),
+        'surge_count': sum(1 for row in all_summary if row['sales_trend'] == '판매 급상승'),
+        'drop_count': sum(1 for row in all_summary if row['sales_trend'] == '판매 급하락'),
+        'no_inbound_count': sum(1 for row in all_summary if row['product_name'] not in planned_inbound_products),
+        'risk_count': sum(1 for row in all_summary if 0 < row['inbound_recent_weeks'] <= 4),
         'distribution': distribution,
-        'top_surges': [row for row in summary if row['sales_trend'] in ['판매 급상승', '판매 상승']][:10],
-        'top_drops': [row for row in summary if row['sales_trend'] in ['판매 급하락', '판매 하락']][:10],
+        'top_surges': [row for row in all_summary if row['sales_trend'] in ['판매 급상승', '판매 상승']][:10],
+        'top_drops': [row for row in all_summary if row['sales_trend'] in ['판매 급하락', '판매 하락']][:10],
         'upload_form': MultiUploadInventoryForm(),
         'search_query': search_query,
         'trend_filter': trend_filter,

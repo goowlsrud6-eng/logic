@@ -9,6 +9,9 @@
   <style>
     th { white-space: nowrap; }
     .metric-card strong { font-size: 1.8rem; }
+    .metric-card a.card { text-decoration: none; transition: transform .12s ease, box-shadow .12s ease; }
+    .metric-card a.card:hover { transform: translateY(-2px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15); }
+    .metric-card a.active-card { outline: 3px solid rgba(13,110,253,.45); }
   </style>
 </head>
 <body class="bg-light">
@@ -63,14 +66,38 @@
   <section class="row g-3 mb-4 metric-card">
     <div class="col-md-3 col-xl-2"><div class="card text-bg-primary"><div class="card-body"><div>전체 품목 수</div><strong>{{ total_products }}</strong></div></div></div>
     <div class="col-md-3 col-xl-2"><div class="card text-bg-secondary"><div class="card-body"><div>전체 옵션 수</div><strong>{{ total_options }}</strong></div></div></div>
-    <div class="col-md-3 col-xl-2"><div class="card text-bg-danger"><div class="card-body"><div>4주 이하</div><strong>{{ under_4_count }}</strong></div></div></div>
-    <div class="col-md-3 col-xl-2"><div class="card text-bg-warning"><div class="card-body"><div>8주 이하</div><strong>{{ under_8_count }}</strong></div></div></div>
-    <div class="col-md-3 col-xl-2"><div class="card text-bg-info"><div class="card-body"><div>판매 급상승</div><strong>{{ surge_count }}</strong></div></div></div>
-    <div class="col-md-3 col-xl-2"><div class="card text-bg-dark"><div class="card-body"><div>판매 급하락</div><strong>{{ drop_count }}</strong></div></div></div>
+    <div class="col-md-3 col-xl-2"><a class="card text-bg-danger {% if card_filter == 'under4' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=under4#card-items"><div class="card-body"><div>4주 이하</div><strong>{{ under_4_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
+    <div class="col-md-3 col-xl-2"><a class="card text-bg-warning {% if card_filter == 'under8' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=under8#card-items"><div class="card-body"><div>8주 이하</div><strong>{{ under_8_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
+    <div class="col-md-3 col-xl-2"><a class="card text-bg-info {% if card_filter == 'surge' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=surge#card-items"><div class="card-body"><div>판매 급상승</div><strong>{{ surge_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
+    <div class="col-md-3 col-xl-2"><a class="card text-bg-dark {% if card_filter == 'drop' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=drop#card-items"><div class="card-body"><div>판매 급하락</div><strong>{{ drop_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
     <div class="col-md-3 col-xl-2"><div class="card"><div class="card-body"><div>입고예정 없는 품목</div><strong>{{ no_inbound_count }}</strong></div></div></div>
     <div class="col-md-3 col-xl-2"><div class="card"><div class="card-body"><div>재고 부족 위험</div><strong>{{ risk_count }}</strong></div></div></div>
     <div class="col-md-6 col-xl-4"><div class="card text-bg-success"><div class="card-body"><div>최근 재고/판매 업로드</div><strong>{{ latest_file.week_label|default:'-' }}</strong></div></div></div>
   </section>
+
+  {% if card_title %}
+  <section id="card-items" class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h5 mb-0">{{ card_title }} 목록</h2>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}">목록 닫기</a>
+      </div>
+      <p class="text-muted small mb-3">품목명을 클릭하면 바로 품목별 상세 화면으로 이동합니다.</p>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered table-hover align-middle text-center">
+          <thead class="table-light"><tr><th>품목명</th><th>현재주 기준 판매가능주</th><th>지난주 기준 판매가능주</th><th>현재고</th><th>입고예정</th><th>입고후재고</th><th>최근한주 판매</th><th>판매상태</th></tr></thead>
+          <tbody>
+          {% for row in card_items %}
+            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td>{{ row.previous_inbound_recent_weeks|weeks1 }}</td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
+          {% empty %}
+            <tr><td colspan="8" class="text-muted">해당 조건에 해당하는 품목이 없습니다.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
 
   <section class="row g-3 mb-4">
     <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h6">판매가능주 분포</h2>{% for label, count in distribution.items %}<div class="d-flex justify-content-between border-bottom py-1"><span>{{ label }}</span><strong>{{ count }}</strong></div>{% endfor %}</div></div></div>
