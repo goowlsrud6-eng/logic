@@ -17,7 +17,7 @@
   {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
   <ul class="nav nav-tabs mb-3">
     <li class="nav-item"><a class="nav-link active" href="{% url 'dashboard' %}">요약 페이지</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'inbound_schedule' %}">입고일정</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'inbound_schedule' %}">입고일정</a></li>{% if last_product_name %}<li class="nav-item"><a class="nav-link" href="{% url 'product_detail' last_product_name %}?upload_id={{ last_upload_id }}">최근 상세: {{ last_product_name }}</a></li>{% endif %}
   </ul>
 
   <section class="card shadow-sm mb-4">
@@ -38,6 +38,25 @@
         <div class="col-md-1"><button class="btn btn-primary w-100" type="submit">계산</button></div>
       </form>
       <div class="form-text mt-2">기준일을 입력하면 주차는 월~금 기준으로 자동 생성됩니다. 오픈일/입고예정 파일은 변경될 때만 올리면 됩니다.</div>
+    </div>
+  </section>
+
+  <section class="card shadow-sm mb-4">
+    <div class="card-body">
+      <h2 class="h5">품목 검색 및 필터</h2>
+      <form method="get" class="row g-2 align-items-end">
+        {% if latest_file %}<input type="hidden" name="upload_id" value="{{ latest_file.id }}">{% endif %}
+        <div class="col-md-5"><label class="form-label">상품명/상품코드/공급처옵션 검색</label><input class="form-control" name="q" value="{{ search_query }}" placeholder="예: ECLL 디즈니"></div>
+        <div class="col-md-3"><label class="form-label">판매상태</label><select class="form-select" name="trend"><option value="">전체</option><option value="판매 급상승" {% if trend_filter == '판매 급상승' %}selected{% endif %}>판매 급상승</option><option value="판매 상승" {% if trend_filter == '판매 상승' %}selected{% endif %}>판매 상승</option><option value="판매 하락" {% if trend_filter == '판매 하락' %}selected{% endif %}>판매 하락</option><option value="판매 급하락" {% if trend_filter == '판매 급하락' %}selected{% endif %}>판매 급하락</option></select></div>
+        <div class="col-md-2"><label class="form-label">입고예정</label><select class="form-select" name="inbound"><option value="">전체</option><option value="yes" {% if inbound_filter == 'yes' %}selected{% endif %}>있음</option><option value="no" {% if inbound_filter == 'no' %}selected{% endif %}>없음</option></select></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">검색</button></div>
+      </form>
+      <div class="mt-3 d-flex flex-wrap gap-2">
+        <span class="text-muted small align-self-center">최근 조회:</span>{% for product in recent_products %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'product_detail' product %}?upload_id={{ latest_file.id }}">{{ product }}</a>{% empty %}<span class="text-muted small">없음</span>{% endfor %}
+      </div>
+      <div class="mt-2 d-flex flex-wrap gap-2">
+        <span class="text-muted small align-self-center">즐겨찾기:</span>{% for product in favorite_products %}<a class="btn btn-sm btn-warning" href="{% url 'product_detail' product %}?upload_id={{ latest_file.id }}">{{ product }}</a>{% empty %}<span class="text-muted small">없음</span>{% endfor %}
+      </div>
     </div>
   </section>
 

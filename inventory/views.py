@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.db.models import Count, Sum
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from .forms import InboundScheduleForm, MultiUploadInventoryForm
@@ -39,6 +40,27 @@ def latest_stock_file(upload_id=None):
             return selected
     return base_qs.order_by('-reference_date', '-created_at').first()
 
+
+
+
+def remember_product(request, product_name, upload_id=None):
+    request.session['last_product_name'] = product_name
+    if upload_id:
+        request.session['last_upload_id'] = str(upload_id)
+    recent = request.session.get('recent_products', [])
+    recent = [item for item in recent if item != product_name]
+    recent.insert(0, product_name)
+    request.session['recent_products'] = recent[:8]
+    request.session.modified = True
+
+
+def product_navigation(product_names, product_name):
+    if product_name not in product_names:
+        return None, None
+    index = product_names.index(product_name)
+    previous_name = product_names[index - 1] if index > 0 else None
+    next_name = product_names[index + 1] if index < len(product_names) - 1 else None
+    return previous_name, next_name
 
 def live_option_rows(metrics, current_file=None):
     inbound_lookup = planned_inbound_by_key()
@@ -93,8 +115,14 @@ def summarize_products(option_rows):
             'sales_days': 0,
             'previous_inbound_recent_weeks': 0,
             'sales_trend': '',
+            'product_codes': set(),
+            'supplier_options': set(),
         })
         row['option_count'] += 1
+        if item.get('product_code'):
+            row['product_codes'].add(str(item['product_code']))
+        if item.get('supplier_option_name'):
+            row['supplier_options'].add(str(item['supplier_option_name']))
         for field in ['available_stock', 'inbound_qty', 'stock_after_inbound', 'delivery_qty', 'pending_qty', 'recent_week_sales', 'total_sales']:
             row[field] += item[field] or 0
         row['sales_days'] = max(row['sales_days'], item['sales_days'] or 0)
@@ -111,6 +139,9 @@ def summarize_products(option_rows):
         row['inbound_recent_weeks'] = safe_weeks(row['stock_after_inbound'], row['recent_week_sales'])
         row['current_total_weeks'] = safe_weeks(row['available_stock'], weekly_total_rate)
         row['inbound_total_weeks'] = safe_weeks(row['stock_after_inbound'], weekly_total_rate)
+        row['product_codes_text'] = ', '.join(sorted(row['product_codes']))
+        row['supplier_options_text'] = ', '.join(sorted(row['supplier_options']))
+        row['search_text'] = f"{row['product_name']} {row['product_codes_text']} {row['supplier_options_text']}".lower()
     return sorted(summary, key=lambda r: r['product_name'])
 
 
@@ -119,6 +150,19 @@ def dashboard(request):
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file).order_by('product_name', 'option_name') if latest_file else ProductOptionMetric.objects.none()
     option_rows = live_option_rows(metrics, latest_file)
     summary = summarize_products(option_rows)
+    all_summary = summary
+    search_query = request.GET.get('q', '').strip()
+    trend_filter = request.GET.get('trend', '').strip()
+    inbound_filter = request.GET.get('inbound', '').strip()
+    if search_query:
+        lowered_query = search_query.lower()
+        summary = [row for row in summary if lowered_query in row['search_text']]
+    if trend_filter:
+        summary = [row for row in summary if row['sales_trend'] == trend_filter]
+    if inbound_filter == 'yes':
+        summary = [row for row in summary if row['inbound_qty'] > 0]
+    elif inbound_filter == 'no':
+        summary = [row for row in summary if row['inbound_qty'] <= 0]
     distribution = {
         '0~4주': sum(1 for row in summary if 0 < row['inbound_recent_weeks'] <= 4),
         '4~8주': sum(1 for row in summary if 4 < row['inbound_recent_weeks'] <= 8),
@@ -141,6 +185,13 @@ def dashboard(request):
         'top_surges': [row for row in summary if row['sales_trend'] in ['판매 급상승', '판매 상승']][:10],
         'top_drops': [row for row in summary if row['sales_trend'] in ['판매 급하락', '판매 하락']][:10],
         'upload_form': MultiUploadInventoryForm(),
+        'search_query': search_query,
+        'trend_filter': trend_filter,
+        'inbound_filter': inbound_filter,
+        'recent_products': request.session.get('recent_products', []),
+        'favorite_products': request.session.get('favorite_products', []),
+        'last_product_name': request.session.get('last_product_name', ''),
+        'last_upload_id': request.session.get('last_upload_id', latest_file.id if latest_file else ''),
         'stock_uploads': UploadedFile.objects.filter(file_type__in=[UploadedFile.FileType.STOCK_SALES, UploadedFile.FileType.LEGACY], status=UploadedFile.Status.COMPLETED).order_by('-reference_date', '-created_at')[:20],
         'uploads': UploadedFile.objects.order_by('-created_at')[:10],
     }
@@ -193,11 +244,33 @@ def upload_inventory(request):
 
 def product_detail(request, product_name):
     latest_file = latest_stock_file(request.GET.get('upload_id'))
+    upload_id = latest_file.id if latest_file else None
+    favorites = request.session.get('favorite_products', [])
+    if request.GET.get('toggle_favorite') == '1':
+        if product_name in favorites:
+            favorites = [item for item in favorites if item != product_name]
+            messages.success(request, '즐겨찾기에서 제거했습니다.')
+        else:
+            favorites.insert(0, product_name)
+            messages.success(request, '즐겨찾기에 추가했습니다.')
+        request.session['favorite_products'] = favorites[:20]
+        request.session.modified = True
+        return redirect(f"{reverse('product_detail', kwargs={'product_name': product_name})}?upload_id={upload_id or ''}")
+
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file, product_name=product_name).order_by('option_name') if latest_file else ProductOptionMetric.objects.none()
     option_rows = live_option_rows(metrics, latest_file)
+    product_names = list(ProductOptionMetric.objects.filter(uploaded_file=latest_file).values_list('product_name', flat=True).distinct().order_by('product_name')) if latest_file else []
+    previous_product, next_product = product_navigation(product_names, product_name)
+    remember_product(request, product_name, upload_id)
     return render(request, 'inventory/product_detail.html', {
         'product_name': product_name,
         'metrics': option_rows,
+        'latest_file': latest_file,
+        'previous_product': previous_product,
+        'next_product': next_product,
+        'recent_products': request.session.get('recent_products', []),
+        'favorite_products': request.session.get('favorite_products', []),
+        'is_favorite': product_name in request.session.get('favorite_products', []),
     })
 
 
@@ -281,6 +354,10 @@ def inbound_schedule(request):
         'inbound_groups': groups,
         'today': today,
         'inbound_form': InboundScheduleForm(),
+        'recent_products': request.session.get('recent_products', []),
+        'favorite_products': request.session.get('favorite_products', []),
+        'last_product_name': request.session.get('last_product_name', ''),
+        'last_upload_id': request.session.get('last_upload_id', ''),
     })
 
 
