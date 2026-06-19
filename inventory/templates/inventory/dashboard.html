@@ -8,6 +8,8 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     th { white-space: nowrap; }
+    .summary-table th { white-space: normal; min-width: 76px; line-height: 1.15; vertical-align: middle; }
+    .summary-table th:first-child { min-width: 220px; }
     .metric-card strong { font-size: 1.8rem; }
     .metric-card a.card { text-decoration: none; transition: transform .12s ease, box-shadow .12s ease; }
     .metric-card a.card:hover { transform: translateY(-2px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15); }
@@ -84,8 +86,8 @@
       </div>
       <p class="text-muted small mb-3">품목명을 클릭하면 바로 품목별 상세 화면으로 이동합니다.</p>
       <div class="table-responsive">
-        <table class="table table-sm table-bordered table-hover align-middle text-center">
-          <thead class="table-light"><tr><th>품목명</th><th>가용재고</th><th>입고예정수량</th><th>입고후재고</th><th>배송</th><th>미출고수량(접수)</th><th>판매수량(지난주)</th><th>판매수량(최근한주)</th><th>일평균(최근한주)</th><th>판매수량(총판매)</th><th>일평균(총판매)</th><th>총판매 기준 현재고 판매가능주</th><th>총판매 기준 입고포함 판매가능주</th><th>최근한주 기준 현재고 판매가능주</th><th>최근한주 기준 입고포함 판매가능주</th><th>판매상태</th></tr></thead>
+        <table class="table table-sm table-bordered table-hover align-middle text-center summary-table">
+          <thead class="table-light"><tr><th title="품목명">품목명</th><th title="가용재고">가용<br>재고</th><th title="입고예정수량">입고<br>예정</th><th title="입고후재고">입고후<br>재고</th><th title="배송">배송</th><th title="미출고수량(접수)">미출고<br>(접수)</th><th title="판매수량(지난주)">지난주</th><th title="판매수량(최근한주)">최근주</th><th title="일평균(최근한주)">최근주<br>일평균</th><th title="판매수량(총판매)">총판매</th><th title="일평균(총판매)">총판매<br>일평균</th><th title="총판매 기준 현재고 판매가능주">총판매<br>현재고</th><th title="총판매 기준 입고포함 판매가능주">총판매<br>입고포함</th><th title="최근한주 기준 현재고 판매가능주">최근주<br>현재고</th><th title="최근한주 기준 입고포함 판매가능주">최근주<br>입고포함</th><th title="판매상태">판매<br>상태</th></tr></thead>
           <tbody>
           {% for row in card_items %}
             <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
@@ -109,8 +111,8 @@
     <div class="card-body">
       <h2 class="h5">품목별 요약</h2>
       <div class="table-responsive">
-        <table class="table table-sm table-bordered table-hover align-middle text-center">
-          <thead class="table-light"><tr><th>품목명</th><th>가용재고</th><th>입고예정수량</th><th>입고후재고</th><th>배송</th><th>미출고수량(접수)</th><th>판매수량(지난주)</th><th>판매수량(최근한주)</th><th>일평균(최근한주)</th><th>판매수량(총판매)</th><th>일평균(총판매)</th><th>총판매 기준 현재고 판매가능주</th><th>총판매 기준 입고포함 판매가능주</th><th>최근한주 기준 현재고 판매가능주</th><th>최근한주 기준 입고포함 판매가능주</th></tr></thead>
+        <table class="table table-sm table-bordered table-hover align-middle text-center summary-table">
+          <thead class="table-light"><tr><th title="품목명">품목명</th><th title="가용재고">가용<br>재고</th><th title="입고예정수량">입고<br>예정</th><th title="입고후재고">입고후<br>재고</th><th title="배송">배송</th><th title="미출고수량(접수)">미출고<br>(접수)</th><th title="판매수량(지난주)">지난주</th><th title="판매수량(최근한주)">최근주</th><th title="일평균(최근한주)">최근주<br>일평균</th><th title="판매수량(총판매)">총판매</th><th title="일평균(총판매)">총판매<br>일평균</th><th title="총판매 기준 현재고 판매가능주">총판매<br>현재고</th><th title="총판매 기준 입고포함 판매가능주">총판매<br>입고포함</th><th title="최근한주 기준 현재고 판매가능주">최근주<br>현재고</th><th title="최근한주 기준 입고포함 판매가능주">최근주<br>입고포함</th></tr></thead>
           <tbody>
           {% for row in summary %}
             <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td></tr>
