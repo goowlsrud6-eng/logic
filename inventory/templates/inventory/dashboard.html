@@ -85,12 +85,12 @@
       <p class="text-muted small mb-3">품목명을 클릭하면 바로 품목별 상세 화면으로 이동합니다.</p>
       <div class="table-responsive">
         <table class="table table-sm table-bordered table-hover align-middle text-center">
-          <thead class="table-light"><tr><th>품목명</th><th>현재주 기준 판매가능주</th><th>지난주 기준 판매가능주</th><th>현재고</th><th>입고예정</th><th>입고후재고</th><th>최근한주 판매</th><th>판매상태</th></tr></thead>
+          <thead class="table-light"><tr><th>품목명</th><th>가용재고</th><th>입고예정수량</th><th>입고후재고</th><th>배송</th><th>미출고수량(접수)</th><th>판매수량(지난주)</th><th>판매수량(최근한주)</th><th>일평균(최근한주)</th><th>판매수량(총판매)</th><th>일평균(총판매)</th><th>총판매 기준 현재고 판매가능주</th><th>총판매 기준 입고포함 판매가능주</th><th>최근한주 기준 현재고 판매가능주</th><th>최근한주 기준 입고포함 판매가능주</th><th>판매상태</th></tr></thead>
           <tbody>
           {% for row in card_items %}
-            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td>{{ row.previous_inbound_recent_weeks|weeks1 }}</td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
+            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
           {% empty %}
-            <tr><td colspan="8" class="text-muted">해당 조건에 해당하는 품목이 없습니다.</td></tr>
+            <tr><td colspan="16" class="text-muted">해당 조건에 해당하는 품목이 없습니다.</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -110,12 +110,12 @@
       <h2 class="h5">품목별 요약</h2>
       <div class="table-responsive">
         <table class="table table-sm table-bordered table-hover align-middle text-center">
-          <thead class="table-light"><tr><th>품목명</th><th>현재고</th><th>입고예정수량</th><th>입고후재고</th><th>배송</th><th>미출고수량(접수)</th><th>최근한주 판매</th><th>총판매</th><th>총판매 기준 현재고</th><th>총판매 기준 입고포함</th><th>최근한주 기준 현재고</th><th>최근한주 기준 입고포함</th><th>판매상태</th></tr></thead>
+          <thead class="table-light"><tr><th>품목명</th><th>가용재고</th><th>입고예정수량</th><th>입고후재고</th><th>배송</th><th>미출고수량(접수)</th><th>판매수량(지난주)</th><th>판매수량(최근한주)</th><th>일평균(최근한주)</th><th>판매수량(총판매)</th><th>일평균(총판매)</th><th>총판매 기준 현재고 판매가능주</th><th>총판매 기준 입고포함 판매가능주</th><th>최근한주 기준 현재고 판매가능주</th><th>최근한주 기준 입고포함 판매가능주</th></tr></thead>
           <tbody>
           {% for row in summary %}
-            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
+            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td></tr>
           {% empty %}
-            <tr><td colspan="13" class="text-muted">아직 처리된 재고/판매 데이터가 없습니다.</td></tr>
+            <tr><td colspan="15" class="text-muted">아직 처리된 재고/판매 데이터가 없습니다.</td></tr>
           {% endfor %}
           </tbody>
         </table>

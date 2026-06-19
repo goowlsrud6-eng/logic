@@ -25,7 +25,7 @@ COLUMN_ALIASES = {
     'inbound_qty': ['총입고예정', '입고예정수량', '입고예정', '수량'],
     'inbound_date': ['입고예정일', '입고일정', '일정'],
     'memo': ['메모', '비고'],
-    'delivery_qty': ['배송'],
+    'delivery_qty': ['송장+배송', '배송'],
     'pending_qty': ['미출고', '접수'],
     'recent_week_sales': ['판매수량최근한주', '최근한주판매수량', '최근한주수량'],
     'total_sales': ['판매수량총판매', '총판매수량'],
@@ -84,9 +84,18 @@ def build_column_map(columns):
     normalized = {col: normalize_header(col) for col in columns}
     mapped = {}
     for target, aliases in COLUMN_ALIASES.items():
-        for col, header in normalized.items():
-            if any(alias in header for alias in aliases):
-                mapped[target] = col
+        normalized_aliases = [normalize_header(alias) for alias in aliases]
+        for alias in normalized_aliases:
+            exact_match = next((col for col, header in normalized.items() if header == alias), None)
+            if exact_match is not None:
+                mapped[target] = exact_match
+                break
+        if target in mapped:
+            continue
+        for alias in normalized_aliases:
+            partial_match = next((col for col, header in normalized.items() if alias in header), None)
+            if partial_match is not None:
+                mapped[target] = partial_match
                 break
     return mapped
 
@@ -378,12 +387,13 @@ def parse_combined_single_sheet_workbook(uploaded_file):
         if not any(current + recent + total):
             continue
         if any(current):
-            product_code, supplier, product_name, option_name, stock, pending, _invoice, delivery, _invoice_delivery = current
+            product_code, supplier, product_name, option_name, stock, pending, _invoice, delivery, invoice_delivery = current
+            delivery_qty = invoice_delivery if invoice_delivery not in [None, ''] else delivery
             key = make_key(product_code, supplier, product_name, option_name)
             item = items.setdefault(key, {'product_code': product_code, 'supplier_option_name': supplier, 'product_name': product_name, 'option_name': option_name})
             if supplier and not item.get('supplier_option_name'):
                 item['supplier_option_name'] = supplier
-            item.update({'available_stock': stock, 'pending_qty': pending, 'delivery_qty': delivery})
+            item.update({'available_stock': stock, 'pending_qty': pending, 'delivery_qty': delivery_qty})
         if any(recent):
             product_code, supplier, product_name, option_name, qty = recent
             key = make_key(product_code, supplier, product_name, option_name)

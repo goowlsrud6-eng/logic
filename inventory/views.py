@@ -92,6 +92,7 @@ def live_option_rows(metrics, current_file=None):
             'inbound_recent_weeks': inbound_recent,
             'current_total_weeks': safe_weeks(item.available_stock, weekly_total_rate),
             'inbound_total_weeks': safe_weeks(stock_after, weekly_total_rate),
+            'previous_week_sales': previous_sales,
             'previous_inbound_recent_weeks': previous_weeks or item.previous_inbound_recent_weeks,
             'status': item.status,
             'sales_trend': judge_sales_trend(inbound_recent, previous_weeks) or item.sales_trend,
@@ -113,6 +114,7 @@ def summarize_products(option_rows):
             'recent_week_sales': 0,
             'total_sales': 0,
             'sales_days': 0,
+            'previous_week_sales': 0,
             'previous_inbound_recent_weeks': 0,
             'sales_trend': '',
             'product_codes': set(),
@@ -123,7 +125,7 @@ def summarize_products(option_rows):
             row['product_codes'].add(str(item['product_code']))
         if item.get('supplier_option_name'):
             row['supplier_options'].add(str(item['supplier_option_name']))
-        for field in ['available_stock', 'inbound_qty', 'stock_after_inbound', 'delivery_qty', 'pending_qty', 'recent_week_sales', 'total_sales']:
+        for field in ['available_stock', 'inbound_qty', 'stock_after_inbound', 'delivery_qty', 'pending_qty', 'recent_week_sales', 'total_sales', 'previous_week_sales']:
             row[field] += item[field] or 0
         row['sales_days'] = max(row['sales_days'], item['sales_days'] or 0)
         row['previous_inbound_recent_weeks'] += item['previous_inbound_recent_weeks'] or 0
@@ -134,11 +136,12 @@ def summarize_products(option_rows):
 
     summary = list(grouped.values())
     for row in summary:
-        weekly_total_rate = (row['total_sales'] / row['sales_days'] * 7) if row['total_sales'] > 0 and row['sales_days'] > 0 else 0
-        row['current_recent_weeks'] = safe_weeks(row['available_stock'], row['recent_week_sales'])
-        row['inbound_recent_weeks'] = safe_weeks(row['stock_after_inbound'], row['recent_week_sales'])
-        row['current_total_weeks'] = safe_weeks(row['available_stock'], weekly_total_rate)
-        row['inbound_total_weeks'] = safe_weeks(row['stock_after_inbound'], weekly_total_rate)
+        row['recent_daily_sales'] = row['recent_week_sales'] / 7 if row['recent_week_sales'] else 0
+        row['total_daily_sales'] = row['total_sales'] / 7 if row['total_sales'] else 0
+        row['current_recent_weeks'] = safe_weeks(row['available_stock'], row['recent_daily_sales'] * 7)
+        row['inbound_recent_weeks'] = safe_weeks(row['stock_after_inbound'], row['recent_daily_sales'] * 7)
+        row['current_total_weeks'] = safe_weeks(row['available_stock'], row['total_daily_sales'] * 7)
+        row['inbound_total_weeks'] = safe_weeks(row['stock_after_inbound'], row['total_daily_sales'] * 7)
         row['product_codes_text'] = ', '.join(sorted(row['product_codes']))
         row['supplier_options_text'] = ', '.join(sorted(row['supplier_options']))
         row['search_text'] = f"{row['product_name']} {row['product_codes_text']} {row['supplier_options_text']}".lower()
