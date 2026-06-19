@@ -323,7 +323,7 @@ def build_metric(uploaded_file, item, week_label, source_sheet, inbound_qty, pre
     pending_qty = as_number(item.get('pending_qty'))
     open_date = item.get('open_date') or find_master_open_date(product_code, supplier_option_name, product_name, option_name)
     reference_date = uploaded_file.reference_date or timezone.localdate()
-    sales_days = max((reference_date - open_date).days + 1, 1) if open_date else 0
+    sales_days = max((reference_date - open_date).days, 1) if open_date else 0
     weekly_total_rate = (total_sales / sales_days * 7) if total_sales > 0 and sales_days > 0 else 0
     stock_after = stock + inbound_qty
     recent_rate = recent_weekly_rate(recent_sales, sales_days)
