@@ -113,6 +113,12 @@ def live_option_rows(metrics, current_file=None):
     return rows
 
 
+
+
+def is_active_option(row):
+    return (row.get('available_stock') or 0) > 0 or (row.get('inbound_qty') or 0) > 0
+
+
 def summarize_products(option_rows):
     grouped = {}
     for item in option_rows:
@@ -190,7 +196,7 @@ def card_product_items(summary, card_filter):
 def dashboard(request):
     latest_file = latest_stock_file(request.GET.get('upload_id'))
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file).order_by('product_name', 'option_name') if latest_file else ProductOptionMetric.objects.none()
-    option_rows = live_option_rows(metrics, latest_file)
+    option_rows = [row for row in live_option_rows(metrics, latest_file) if is_active_option(row)]
     summary = summarize_products(option_rows)
     all_summary = list(summary)
     card_filter = request.GET.get('card', '').strip()
@@ -305,7 +311,7 @@ def product_detail(request, product_name):
         return redirect(f"{reverse('product_detail', kwargs={'product_name': product_name})}?upload_id={upload_id or ''}")
 
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file, product_name=product_name).order_by('option_name') if latest_file else ProductOptionMetric.objects.none()
-    option_rows = live_option_rows(metrics, latest_file)
+    option_rows = [row for row in live_option_rows(metrics, latest_file) if is_active_option(row)]
     product_names = list(ProductOptionMetric.objects.filter(uploaded_file=latest_file).values_list('product_name', flat=True).distinct().order_by('product_name')) if latest_file else []
     previous_product, next_product = product_navigation(product_names, product_name)
     remember_product(request, product_name, upload_id)
