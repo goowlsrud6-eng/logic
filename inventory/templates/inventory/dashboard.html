@@ -14,6 +14,10 @@
     .metric-card a.card { text-decoration: none; transition: transform .12s ease, box-shadow .12s ease; }
     .metric-card a.card:hover { transform: translateY(-2px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15); }
     .metric-card a.active-card { outline: 3px solid rgba(13,110,253,.45); }
+    .trend-surge, .trend-surge-strong { color: #0d6efd !important; font-weight: 700; }
+    .trend-surge-strong { background-color: #c0e6f5 !important; }
+    .trend-drop, .trend-drop-strong { color: #dc3545 !important; font-weight: 700; }
+    .trend-drop-strong { background-color: #f2ceef !important; }
   </style>
 </head>
 <body class="bg-light">
@@ -52,7 +56,7 @@
       <form method="get" class="row g-2 align-items-end">
         {% if latest_file %}<input type="hidden" name="upload_id" value="{{ latest_file.id }}">{% endif %}
         <div class="col-md-5"><label class="form-label">상품명/상품코드/공급처옵션 검색</label><input class="form-control" name="q" value="{{ search_query }}" placeholder="예: ECLL 디즈니"></div>
-        <div class="col-md-3"><label class="form-label">판매상태</label><select class="form-select" name="trend"><option value="">전체</option><option value="판매 급상승" {% if trend_filter == '판매 급상승' %}selected{% endif %}>판매 급상승</option><option value="판매 상승" {% if trend_filter == '판매 상승' %}selected{% endif %}>판매 상승</option><option value="판매 하락" {% if trend_filter == '판매 하락' %}selected{% endif %}>판매 하락</option><option value="판매 급하락" {% if trend_filter == '판매 급하락' %}selected{% endif %}>판매 급하락</option></select></div>
+        <div class="col-md-3"><label class="form-label">판매상태</label><select class="form-select" name="trend"><option value="">전체</option><option value="판매 급등" {% if trend_filter == '판매 급등' %}selected{% endif %}>판매 급등</option><option value="판매 상승" {% if trend_filter == '판매 상승' %}selected{% endif %}>판매 상승</option><option value="판매 하락" {% if trend_filter == '판매 하락' %}selected{% endif %}>판매 하락</option><option value="판매 급감" {% if trend_filter == '판매 급감' %}selected{% endif %}>판매 급감</option></select></div>
         <div class="col-md-2"><label class="form-label">입고예정</label><select class="form-select" name="inbound"><option value="">전체</option><option value="yes" {% if inbound_filter == 'yes' %}selected{% endif %}>있음</option><option value="no" {% if inbound_filter == 'no' %}selected{% endif %}>없음</option></select></div>
         <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">검색</button></div>
       </form>
@@ -70,8 +74,8 @@
     <div class="col-md-3 col-xl-2"><div class="card text-bg-secondary"><div class="card-body"><div>전체 옵션 수</div><strong>{{ total_options }}</strong></div></div></div>
     <div class="col-md-3 col-xl-2"><a class="card text-bg-danger {% if card_filter == 'under4' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=under4#card-items"><div class="card-body"><div>4주 이하</div><strong>{{ under_4_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
     <div class="col-md-3 col-xl-2"><a class="card text-bg-warning {% if card_filter == 'under8' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=under8#card-items"><div class="card-body"><div>8주 이하</div><strong>{{ under_8_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
-    <div class="col-md-3 col-xl-2"><a class="card text-bg-info {% if card_filter == 'surge' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=surge#card-items"><div class="card-body"><div>판매 급상승</div><strong>{{ surge_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
-    <div class="col-md-3 col-xl-2"><a class="card text-bg-dark {% if card_filter == 'drop' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=drop#card-items"><div class="card-body"><div>판매 급하락</div><strong>{{ drop_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
+    <div class="col-md-3 col-xl-2"><a class="card text-bg-info {% if card_filter == 'surge' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=surge#card-items"><div class="card-body"><div>판매 급등</div><strong>{{ surge_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
+    <div class="col-md-3 col-xl-2"><a class="card text-bg-dark {% if card_filter == 'drop' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&card=drop#card-items"><div class="card-body"><div>판매 급감</div><strong>{{ drop_count }}</strong><div class="small mt-1">클릭해서 품목 보기</div></div></a></div>
     <div class="col-md-3 col-xl-2"><div class="card"><div class="card-body"><div>입고예정 없는 품목</div><strong>{{ no_inbound_count }}</strong></div></div></div>
     <div class="col-md-3 col-xl-2"><div class="card"><div class="card-body"><div>재고 부족 위험</div><strong>{{ risk_count }}</strong></div></div></div>
     <div class="col-md-6 col-xl-4"><div class="card text-bg-success"><div class="card-body"><div>최근 재고/판매 업로드</div><strong>{{ latest_file.week_label|default:'-' }}</strong></div></div></div>
@@ -90,7 +94,7 @@
           <thead class="table-light"><tr><th title="품목명">품목명</th><th title="가용재고">가용<br>재고</th><th title="입고예정수량">입고<br>예정</th><th title="입고후재고">입고후<br>재고</th><th title="배송">배송</th><th title="미출고수량(접수)">미출고<br>(접수)</th><th title="판매수량(지난주)">지난주</th><th title="판매수량(최근한주)">최근주</th><th title="일평균(최근한주)">최근주<br>일평균</th><th title="판매수량(총판매)">총판매</th><th title="일평균(총판매)">총판매<br>일평균</th><th title="총판매 기준 현재고 판매가능주">총판매<br>현재고</th><th title="총판매 기준 입고포함 판매가능주">총판매<br>입고포함</th><th title="최근한주 기준 현재고 판매가능주">최근주<br>현재고</th><th title="최근한주 기준 입고포함 판매가능주">최근주<br>입고포함</th><th title="판매상태">판매<br>상태</th></tr></thead>
           <tbody>
           {% for row in card_items %}
-            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td>{{ row.sales_trend|default:'-' }}</td></tr>
+            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td class="{{ row.sales_trend_class }}">{{ row.sales_trend|default:'-' }}</td></tr>
           {% empty %}
             <tr><td colspan="16" class="text-muted">해당 조건에 해당하는 품목이 없습니다.</td></tr>
           {% endfor %}
@@ -103,8 +107,8 @@
 
   <section class="row g-3 mb-4">
     <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h6">판매가능주 분포</h2>{% for label, count in distribution.items %}<div class="d-flex justify-content-between border-bottom py-1"><span>{{ label }}</span><strong>{{ count }}</strong></div>{% endfor %}</div></div></div>
-    <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h6">판매 급상승 TOP 10</h2>{% for row in top_surges %}<div class="small border-bottom py-1">{{ row.product_name }} <span class="text-primary">{{ row.sales_trend }}</span></div>{% empty %}<div class="text-muted small">대상 없음</div>{% endfor %}</div></div></div>
-    <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h6">판매 급하락 TOP 10</h2>{% for row in top_drops %}<div class="small border-bottom py-1">{{ row.product_name }} <span class="text-danger">{{ row.sales_trend }}</span></div>{% empty %}<div class="text-muted small">대상 없음</div>{% endfor %}</div></div></div>
+    <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h6">판매 급등 TOP 10</h2>{% for row in top_surges %}<div class="small border-bottom py-1">{{ row.product_name }} <span class="{{ row.sales_trend_class }}">{{ row.sales_trend }}</span></div>{% empty %}<div class="text-muted small">대상 없음</div>{% endfor %}</div></div></div>
+    <div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-body"><h2 class="h6">판매 급감 TOP 10</h2>{% for row in top_drops %}<div class="small border-bottom py-1">{{ row.product_name }} <span class="{{ row.sales_trend_class }}">{{ row.sales_trend }}</span></div>{% empty %}<div class="text-muted small">대상 없음</div>{% endfor %}</div></div></div>
   </section>
 
   <section class="card shadow-sm mb-4">
@@ -112,12 +116,12 @@
       <h2 class="h5">품목별 요약</h2>
       <div class="table-responsive">
         <table class="table table-sm table-bordered table-hover align-middle text-center summary-table">
-          <thead class="table-light"><tr><th title="품목명">품목명</th><th title="가용재고">가용<br>재고</th><th title="입고예정수량">입고<br>예정</th><th title="입고후재고">입고후<br>재고</th><th title="배송">배송</th><th title="미출고수량(접수)">미출고<br>(접수)</th><th title="판매수량(지난주)">지난주</th><th title="판매수량(최근한주)">최근주</th><th title="일평균(최근한주)">최근주<br>일평균</th><th title="판매수량(총판매)">총판매</th><th title="일평균(총판매)">총판매<br>일평균</th><th title="총판매 기준 현재고 판매가능주">총판매<br>현재고</th><th title="총판매 기준 입고포함 판매가능주">총판매<br>입고포함</th><th title="최근한주 기준 현재고 판매가능주">최근주<br>현재고</th><th title="최근한주 기준 입고포함 판매가능주">최근주<br>입고포함</th></tr></thead>
+          <thead class="table-light"><tr><th title="품목명">품목명</th><th title="가용재고">가용<br>재고</th><th title="입고예정수량">입고<br>예정</th><th title="입고후재고">입고후<br>재고</th><th title="배송">배송</th><th title="미출고수량(접수)">미출고<br>(접수)</th><th title="판매수량(지난주)">지난주</th><th title="판매수량(최근한주)">최근주</th><th title="일평균(최근한주)">최근주<br>일평균</th><th title="판매수량(총판매)">총판매</th><th title="일평균(총판매)">총판매<br>일평균</th><th title="총판매 기준 현재고 판매가능주">총판매<br>현재고</th><th title="총판매 기준 입고포함 판매가능주">총판매<br>입고포함</th><th title="최근한주 기준 현재고 판매가능주">최근주<br>현재고</th><th title="최근한주 기준 입고포함 판매가능주">최근주<br>입고포함</th><th title="판매상태">판매<br>상태</th></tr></thead>
           <tbody>
           {% for row in summary %}
-            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td></tr>
+            <tr><td class="text-start"><a href="{% url 'product_detail' row.product_name %}?upload_id={{ latest_file.id }}">{{ row.product_name }}</a></td><td>{{ row.available_stock|comma0 }}</td><td>{{ row.inbound_qty|comma0 }}</td><td>{{ row.stock_after_inbound|comma0 }}</td><td>{{ row.delivery_qty|comma0 }}</td><td>{{ row.pending_qty|comma0 }}</td><td>{{ row.previous_week_sales|comma0 }}</td><td>{{ row.recent_week_sales|comma0 }}</td><td>{{ row.recent_daily_sales|comma0 }}</td><td>{{ row.total_sales|comma0 }}</td><td>{{ row.total_daily_sales|comma0 }}</td><td>{{ row.current_total_weeks|weeks1 }}</td><td>{{ row.inbound_total_weeks|weeks1 }}</td><td>{{ row.current_recent_weeks|weeks1 }}</td><td>{{ row.inbound_recent_weeks|weeks1 }}</td><td class="{{ row.sales_trend_class }}">{{ row.sales_trend|default:'-' }}</td></tr>
           {% empty %}
-            <tr><td colspan="15" class="text-muted">아직 처리된 재고/판매 데이터가 없습니다.</td></tr>
+            <tr><td colspan="16" class="text-muted">아직 처리된 재고/판매 데이터가 없습니다.</td></tr>
           {% endfor %}
           </tbody>
         </table>

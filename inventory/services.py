@@ -178,15 +178,33 @@ def judge_stock_status(weeks):
     return '정상'
 
 
+def normalize_sales_trend(value):
+    if value == '판매 급상승':
+        return '판매 급등'
+    if value == '판매 급하락':
+        return '판매 급감'
+    return value or ''
+
+
+def sales_trend_css_class(value):
+    normalized = normalize_sales_trend(value)
+    return {
+        '판매 급등': 'trend-surge-strong',
+        '판매 상승': 'trend-surge',
+        '판매 하락': 'trend-drop',
+        '판매 급감': 'trend-drop-strong',
+    }.get(normalized, '')
+
+
 def judge_sales_trend(current_weeks, previous_weeks):
     if current_weeks <= 0 or previous_weeks <= 0:
         return ''
     if current_weeks <= previous_weeks / 10:
-        return '판매 급상승'
+        return '판매 급등'
     if current_weeks <= previous_weeks / 3:
         return '판매 상승'
     if current_weeks >= previous_weeks * 10:
-        return '판매 급하락'
+        return '판매 급감'
     if current_weeks >= previous_weeks * 3:
         return '판매 하락'
     return ''

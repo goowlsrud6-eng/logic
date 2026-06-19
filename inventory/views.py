@@ -15,6 +15,7 @@ from .services import (
     infer_week_label,
     first_lookup,
     judge_sales_trend,
+    normalize_sales_trend,
     metric_key,
     parse_combined_single_sheet_workbook,
     parse_inbound_schedule_workbook,
@@ -26,6 +27,7 @@ from .services import (
     recent_sales_period_days,
     recent_weekly_rate,
     safe_weeks,
+    sales_trend_css_class,
     sha256_file,
 )
 
@@ -78,6 +80,7 @@ def live_option_rows(metrics, current_file=None):
         weekly_total_rate = (item.total_sales / item.sales_days * 7) if item.total_sales > 0 and item.sales_days > 0 else 0
         previous_sales = first_lookup(previous_sales_lookup, item.product_code, item.supplier_option_name, item.product_name, item.option_name, default=0)
         previous_weeks = safe_weeks(stock_after, previous_sales)
+        sales_trend = normalize_sales_trend(judge_sales_trend(inbound_recent, previous_weeks) or item.sales_trend)
         rows.append({
             'id': item.id,
             'product_code': item.product_code,
@@ -102,7 +105,8 @@ def live_option_rows(metrics, current_file=None):
             'previous_week_sales': previous_sales,
             'previous_inbound_recent_weeks': previous_weeks or item.previous_inbound_recent_weeks,
             'status': item.status,
-            'sales_trend': judge_sales_trend(inbound_recent, previous_weeks) or item.sales_trend,
+            'sales_trend': sales_trend,
+            'sales_trend_class': sales_trend_css_class(sales_trend),
         })
     return rows
 
@@ -137,10 +141,11 @@ def summarize_products(option_rows):
             row[field] += item[field] or 0
         row['sales_days'] = max(row['sales_days'], item['sales_days'] or 0)
         row['previous_inbound_recent_weeks'] += item['previous_inbound_recent_weeks'] or 0
-        if item['sales_trend'] in ['판매 급상승', '판매 급하락']:
-            row['sales_trend'] = item['sales_trend']
-        elif not row['sales_trend'] and item['sales_trend']:
-            row['sales_trend'] = item['sales_trend']
+        item_trend = normalize_sales_trend(item['sales_trend'])
+        if item_trend in ['판매 급등', '판매 급감']:
+            row['sales_trend'] = item_trend
+        elif not row['sales_trend'] and item_trend:
+            row['sales_trend'] = item_trend
 
     summary = list(grouped.values())
     for row in summary:
@@ -151,6 +156,7 @@ def summarize_products(option_rows):
         row['inbound_total_weeks'] = safe_weeks(row['stock_after_inbound'], row['total_daily_sales'] * 7)
         row['product_codes_text'] = ', '.join(sorted(row['product_codes']))
         row['supplier_options_text'] = ', '.join(sorted(row['supplier_options']))
+        row['sales_trend_class'] = sales_trend_css_class(row['sales_trend'])
         row['search_text'] = f"{row['product_name']} {row['product_codes_text']} {row['supplier_options_text']}".lower()
     return sorted(summary, key=lambda r: r['product_name'])
 
@@ -159,8 +165,8 @@ def card_product_items(summary, card_filter):
     labels = {
         'under4': '4주 이하 품목',
         'under8': '8주 이하 품목',
-        'surge': '판매 급상승 품목',
-        'drop': '판매 급하락 품목',
+        'surge': '판매 급등 품목',
+        'drop': '판매 급감 품목',
     }
     if card_filter == 'under4':
         rows = [row for row in summary if 0 < row['inbound_recent_weeks'] <= 4]
@@ -169,10 +175,10 @@ def card_product_items(summary, card_filter):
         rows = [row for row in summary if 0 < row['inbound_recent_weeks'] <= 8]
         rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
     elif card_filter == 'surge':
-        rows = [row for row in summary if row['sales_trend'] == '판매 급상승']
+        rows = [row for row in summary if row['sales_trend'] == '판매 급등']
         rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
     elif card_filter == 'drop':
-        rows = [row for row in summary if row['sales_trend'] == '판매 급하락']
+        rows = [row for row in summary if row['sales_trend'] == '판매 급감']
         rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999, reverse=True)
     else:
         return '', []
@@ -188,7 +194,7 @@ def dashboard(request):
     card_filter = request.GET.get('card', '').strip()
     card_title, card_items = card_product_items(all_summary, card_filter)
     search_query = request.GET.get('q', '').strip()
-    trend_filter = request.GET.get('trend', '').strip()
+    trend_filter = normalize_sales_trend(request.GET.get('trend', '').strip())
     inbound_filter = request.GET.get('inbound', '').strip()
     if search_query:
         lowered_query = search_query.lower()
@@ -216,13 +222,13 @@ def dashboard(request):
         'total_options': len(option_rows),
         'under_4_count': sum(1 for row in all_summary if 0 < row['inbound_recent_weeks'] <= 4),
         'under_8_count': sum(1 for row in all_summary if 0 < row['inbound_recent_weeks'] <= 8),
-        'surge_count': sum(1 for row in all_summary if row['sales_trend'] == '판매 급상승'),
-        'drop_count': sum(1 for row in all_summary if row['sales_trend'] == '판매 급하락'),
+        'surge_count': sum(1 for row in all_summary if row['sales_trend'] == '판매 급등'),
+        'drop_count': sum(1 for row in all_summary if row['sales_trend'] == '판매 급감'),
         'no_inbound_count': sum(1 for row in all_summary if row['product_name'] not in planned_inbound_products),
         'risk_count': sum(1 for row in all_summary if 0 < row['inbound_recent_weeks'] <= 4),
         'distribution': distribution,
-        'top_surges': [row for row in all_summary if row['sales_trend'] in ['판매 급상승', '판매 상승']][:10],
-        'top_drops': [row for row in all_summary if row['sales_trend'] in ['판매 급하락', '판매 하락']][:10],
+        'top_surges': [row for row in all_summary if row['sales_trend'] in ['판매 급등', '판매 상승']][:10],
+        'top_drops': [row for row in all_summary if row['sales_trend'] in ['판매 급감', '판매 하락']][:10],
         'upload_form': MultiUploadInventoryForm(),
         'search_query': search_query,
         'trend_filter': trend_filter,
