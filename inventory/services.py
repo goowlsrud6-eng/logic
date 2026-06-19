@@ -157,6 +157,17 @@ def safe_weeks(stock, weekly_sales):
     return round(stock / weekly_sales, 1)
 
 
+def recent_sales_period_days(sales_days):
+    if sales_days and sales_days > 0:
+        return min(7, sales_days)
+    return 7
+
+
+def recent_weekly_rate(recent_sales, sales_days):
+    period_days = recent_sales_period_days(sales_days)
+    return (recent_sales / period_days * 7) if recent_sales > 0 and period_days > 0 else 0
+
+
 def judge_stock_status(weeks):
     if weeks <= 0:
         return '판매없음'
@@ -297,8 +308,9 @@ def build_metric(uploaded_file, item, week_label, source_sheet, inbound_qty, pre
     sales_days = max((reference_date - open_date).days + 1, 1) if open_date else 0
     weekly_total_rate = (total_sales / sales_days * 7) if total_sales > 0 and sales_days > 0 else 0
     stock_after = stock + inbound_qty
-    current_recent = safe_weeks(stock, recent_sales)
-    inbound_recent = safe_weeks(stock_after, recent_sales)
+    recent_rate = recent_weekly_rate(recent_sales, sales_days)
+    current_recent = safe_weeks(stock, recent_rate)
+    inbound_recent = safe_weeks(stock_after, recent_rate)
     current_total = safe_weeks(stock, weekly_total_rate)
     inbound_total = safe_weeks(stock_after, weekly_total_rate)
     prev_sales = first_lookup(previous_recent_sales, product_code, supplier_option_name, product_name, option_name, default=0)
