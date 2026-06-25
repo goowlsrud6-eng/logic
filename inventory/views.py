@@ -81,7 +81,7 @@ def live_option_rows(metrics, current_file=None):
         weekly_total_rate = total_daily_sales * 7
         previous_sales = first_lookup(previous_sales_lookup, item.product_code, item.supplier_option_name, item.product_name, item.option_name, default=0)
         previous_weeks = safe_weeks(stock_after, previous_sales)
-        sales_trend = normalize_sales_trend(judge_sales_trend(inbound_recent, previous_weeks) or item.sales_trend)
+        sales_trend = normalize_sales_trend(judge_sales_trend(inbound_recent, previous_weeks))
         rows.append({
             'id': item.id,
             'product_code': item.product_code,
@@ -149,11 +149,6 @@ def summarize_products(option_rows):
         for field in ['available_stock', 'inbound_qty', 'stock_after_inbound', 'delivery_qty', 'pending_qty', 'recent_week_sales', 'total_sales', 'total_daily_sales', 'previous_week_sales', 'recent_daily_sales']:
             row[field] += item[field] or 0
         row['sales_days'] = max(row['sales_days'], item['sales_days'] or 0)
-        item_trend = normalize_sales_trend(item['sales_trend'])
-        if item_trend in ['판매 급등', '판매 급감']:
-            row['sales_trend'] = item_trend
-        elif not row['sales_trend'] and item_trend:
-            row['sales_trend'] = item_trend
 
     summary = list(grouped.values())
     for row in summary:
@@ -162,7 +157,7 @@ def summarize_products(option_rows):
         row['current_total_weeks'] = safe_weeks(row['available_stock'], row['total_daily_sales'] * 7)
         row['inbound_total_weeks'] = safe_weeks(row['stock_after_inbound'], row['total_daily_sales'] * 7)
         row['previous_inbound_recent_weeks'] = safe_weeks(row['stock_after_inbound'], row['previous_week_sales'])
-        row['sales_trend'] = normalize_sales_trend(judge_sales_trend(row['inbound_recent_weeks'], row['previous_inbound_recent_weeks']) or row['sales_trend'])
+        row['sales_trend'] = normalize_sales_trend(judge_sales_trend(row['inbound_recent_weeks'], row['previous_inbound_recent_weeks']))
         row['product_codes_text'] = ', '.join(sorted(row['product_codes']))
         row['supplier_options_text'] = ', '.join(sorted(row['supplier_options']))
         row['sales_trend_class'] = sales_trend_css_class(row['sales_trend'])
