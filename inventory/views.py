@@ -412,7 +412,14 @@ def inbound_schedule(request):
 
     inbound_schedules = InboundSchedule.objects.order_by('order_number', 'inbound_date', 'product_name', 'option_name')
     groups = []
-    grouped = defaultdict(lambda: {'option_count': 0, 'quantity': 0, 'inbound_dates': set(), 'memo': ''})
+    grouped = defaultdict(lambda: {
+        'option_count': 0,
+        'quantity': 0,
+        'inbound_dates': set(),
+        'memo': '',
+        'product_names': set(),
+        'details': [],
+    })
     for item in inbound_schedules:
         if not item.order_number:
             continue
@@ -422,9 +429,28 @@ def inbound_schedule(request):
         group['quantity'] += item.quantity or 0
         if item.inbound_date:
             group['inbound_dates'].add(item.inbound_date)
+        if item.product_name:
+            group['product_names'].add(item.product_name)
+        group['details'].append({
+            'product_name': item.product_name,
+            'option_name': item.option_name,
+            'supplier_option_name': item.supplier_option_name,
+            'quantity': item.quantity or 0,
+            'inbound_date': item.inbound_date,
+            'memo': item.memo,
+        })
         if item.memo and not group['memo']:
             group['memo'] = item.memo
     for group in grouped.values():
+        product_names = sorted(group['product_names'])
+        if not product_names:
+            group['product_label'] = '-'
+        elif len(product_names) == 1:
+            group['product_label'] = product_names[0]
+        else:
+            group['product_label'] = f'{product_names[0]} 외 {len(product_names) - 1}건'
+        group['product_names_text'] = ', '.join(product_names)
+        group['details'].sort(key=lambda row: (row['product_name'] or '', row['option_name'] or '', row['supplier_option_name'] or ''))
         group['inbound_dates'] = ', '.join(sorted(date.strftime('%Y-%m-%d') for date in group['inbound_dates'])) or '날짜 미정'
         groups.append(group)
     groups.sort(key=lambda row: row['order_number'])
