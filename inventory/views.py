@@ -165,6 +165,34 @@ def summarize_products(option_rows):
     return sorted(summary, key=lambda r: r['product_name'])
 
 
+
+
+def summarize_option_rows(option_rows):
+    totals = {
+        'available_stock': 0,
+        'inbound_qty': 0,
+        'stock_after_inbound': 0,
+        'delivery_qty': 0,
+        'pending_qty': 0,
+        'previous_week_sales': 0,
+        'recent_week_sales': 0,
+        'recent_daily_sales': 0,
+        'total_sales': 0,
+        'total_daily_sales': 0,
+    }
+    for row in option_rows:
+        for field in totals:
+            totals[field] += row.get(field) or 0
+    totals['current_recent_weeks'] = safe_weeks(totals['available_stock'], totals['recent_daily_sales'] * 7)
+    totals['inbound_recent_weeks'] = safe_weeks(totals['stock_after_inbound'], totals['recent_daily_sales'] * 7)
+    totals['current_total_weeks'] = safe_weeks(totals['available_stock'], totals['total_daily_sales'] * 7)
+    totals['inbound_total_weeks'] = safe_weeks(totals['stock_after_inbound'], totals['total_daily_sales'] * 7)
+    totals['previous_inbound_recent_weeks'] = safe_weeks(totals['stock_after_inbound'], totals['previous_week_sales'])
+    totals['sales_trend'] = normalize_sales_trend(judge_sales_trend(totals['inbound_recent_weeks'], totals['previous_inbound_recent_weeks']))
+    totals['sales_trend_class'] = sales_trend_css_class(totals['sales_trend'])
+    return totals
+
+
 def card_product_items(summary, card_filter):
     labels = {
         'under4': '4주 이하 품목',
@@ -310,11 +338,13 @@ def product_detail(request, product_name):
     option_rows = [row for row in live_option_rows(metrics, latest_file) if is_active_option(row)]
     product_names = list(ProductOptionMetric.objects.filter(uploaded_file=latest_file).values_list('product_name', flat=True).distinct().order_by('product_name')) if latest_file else []
     previous_product, next_product = product_navigation(product_names, product_name)
+    detail_totals = summarize_option_rows(option_rows)
     remember_product(request, product_name, upload_id)
     return render(request, 'inventory/product_detail.html', {
         'product_name': product_name,
         'metrics': option_rows,
         'latest_file': latest_file,
+        'detail_totals': detail_totals,
         'previous_product': previous_product,
         'next_product': next_product,
         'recent_products': request.session.get('recent_products', []),
