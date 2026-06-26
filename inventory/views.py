@@ -220,6 +220,7 @@ def card_product_items(summary, card_filter):
 
 
 def dashboard(request):
+    page = request.GET.get('page', 'dashboard').strip() or 'dashboard'
     latest_file = latest_stock_file(request.GET.get('upload_id'))
     metrics = ProductOptionMetric.objects.filter(uploaded_file=latest_file).order_by('product_name', 'option_name') if latest_file else ProductOptionMetric.objects.none()
     option_rows = [row for row in live_option_rows(metrics, latest_file) if is_active_option(row)]
@@ -227,6 +228,10 @@ def dashboard(request):
     all_summary = list(summary)
     card_filter = request.GET.get('card', '').strip()
     card_title, card_items = card_product_items(all_summary, card_filter)
+    top_total_sales = sorted(all_summary, key=lambda row: row['total_sales'] or 0, reverse=True)[:10]
+    top_recent_sales = sorted(all_summary, key=lambda row: row['recent_week_sales'] or 0, reverse=True)[:10]
+    max_total_sales = max([row['total_sales'] or 0 for row in top_total_sales] or [0]) or 1
+    max_recent_sales = max([row['recent_week_sales'] or 0 for row in top_recent_sales] or [0]) or 1
     search_query = request.GET.get('q', '').strip()
     trend_filter = normalize_sales_trend(request.GET.get('trend', '').strip())
     inbound_filter = request.GET.get('inbound', '').strip()
@@ -247,6 +252,7 @@ def dashboard(request):
     }
     planned_inbound_products = set(InboundSchedule.objects.filter(status=InboundSchedule.Status.PLANNED).values_list('product_name', flat=True))
     context = {
+        'page': page,
         'latest_file': latest_file,
         'summary': summary,
         'card_filter': card_filter,
@@ -263,6 +269,10 @@ def dashboard(request):
         'distribution': distribution,
         'top_surges': [row for row in all_summary if row['sales_trend'] in ['판매 급등', '판매 상승']][:10],
         'top_drops': [row for row in all_summary if row['sales_trend'] in ['판매 급감', '판매 하락']][:10],
+        'top_total_sales': top_total_sales,
+        'top_recent_sales': top_recent_sales,
+        'max_total_sales': max_total_sales,
+        'max_recent_sales': max_recent_sales,
         'upload_form': MultiUploadInventoryForm(),
         'search_query': search_query,
         'trend_filter': trend_filter,
