@@ -36,7 +36,8 @@ COLUMN_ALIASES = {
 
 
 def normalize_header(value):
-    return str(value or '').replace('\n', '').replace('\r', '').replace(' ', '').strip()
+    text = str(value or '').replace('\n', '').replace('\r', '').strip().lower()
+    return re.sub(r'[\s\-_/\.\(\)\[\]\{\}]+', '', text)
 
 
 def normalize_lookup_text(value):
@@ -133,6 +134,11 @@ def parse_date(value, reference_date=None):
             return datetime.strptime(compact, '%Y%m%d').date()
         except ValueError:
             pass
+    if len(compact) == 2 and not re.match(r'^[12][0-9]{3}', compact):
+        try:
+            return date(base_year, int(compact[0]), int(compact[1]))
+        except ValueError:
+            pass
     if len(compact) in {3, 4} and not re.match(r'^[12][0-9]{3}', compact):
         compact = compact.zfill(4)
         try:
@@ -140,7 +146,7 @@ def parse_date(value, reference_date=None):
         except ValueError:
             pass
 
-    slash_match = re.fullmatch(r'(\d{1,2})[/-](\d{1,2})', text)
+    slash_match = re.search(r'(\d{1,2})[/-](\d{1,2})', text)
     if slash_match:
         try:
             return date(base_year, int(slash_match.group(1)), int(slash_match.group(2)))
