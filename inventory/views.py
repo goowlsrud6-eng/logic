@@ -201,12 +201,16 @@ def card_product_items(summary, card_filter):
         'under8': '8주 이하 품목',
         'surge': '판매 급등 품목',
         'drop': '판매 급감 품목',
+        'risk': '재고 부족 위험 품목',
     }
     if card_filter == 'under4':
         rows = [row for row in summary if 0 < row['inbound_recent_weeks'] <= 4]
         rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
     elif card_filter == 'under8':
         rows = [row for row in summary if 0 < row['inbound_recent_weeks'] <= 8]
+        rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
+    elif card_filter == 'risk':
+        rows = [row for row in summary if 0 < row['inbound_recent_weeks'] <= 4]
         rows.sort(key=lambda row: row['inbound_recent_weeks'] or 999999)
     elif card_filter == 'surge':
         rows = [row for row in summary if row['sales_trend'] == '판매 급등']

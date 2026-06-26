@@ -19,6 +19,7 @@
     .kpi-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--primary); }
     .kpi-card .label { color:#64748b; font-size:.85rem; font-weight:700; }
     .kpi-card strong { font-size:1.8rem; letter-spacing:-.05em; }
+    .click-hint { color:var(--primary); font-size:.78rem; font-weight:700; }
     .kpi-card:hover { box-shadow:0 .75rem 1.5rem rgba(37,99,235,.12); transform:translateY(-1px); }
     .kpi-card.active-card { outline:3px solid rgba(37,99,235,.22); }
     .summary-table th { white-space:normal; min-width:76px; line-height:1.15; vertical-align:middle; position:sticky; top:0; z-index:1; background:#f8fafc; }
@@ -56,11 +57,11 @@
   {% if page == 'dashboard' %}
   <section class="row g-3 mb-4 metric-card">
     <div class="col-md-4 col-xl-2"><div class="kpi-card p-3"><div class="label">전체 품목 수</div><strong>{{ total_products }}</strong></div></div>
-    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'under4' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=under4#card-items"><div class="label">최근한주 기준 4주 이하</div><strong>{{ under_4_count }}</strong></a></div>
-    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'under8' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=under8#card-items"><div class="label">최근한주 기준 8주 이하</div><strong>{{ under_8_count }}</strong></a></div>
-    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'surge' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=surge#card-items"><div class="label">판매 급등</div><strong>{{ surge_count }}</strong><div class="small text-muted">최근주 vs 지난주</div></a></div>
-    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'drop' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=drop#card-items"><div class="label">판매 급감</div><strong>{{ drop_count }}</strong><div class="small text-muted">최근주 vs 지난주</div></a></div>
-    <div class="col-md-4 col-xl-2"><div class="kpi-card p-3"><div class="label">재고 부족 위험</div><strong>{{ risk_count }}</strong></div></div>
+    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'under4' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=under4#card-items"><div class="label">최근한주 기준 4주 이하</div><strong>{{ under_4_count }}</strong><div class="click-hint mt-2">클릭해서 품목 보기 →</div></a></div>
+    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'under8' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=under8#card-items"><div class="label">최근한주 기준 8주 이하</div><strong>{{ under_8_count }}</strong><div class="click-hint mt-2">클릭해서 품목 보기 →</div></a></div>
+    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'surge' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=surge#card-items"><div class="label">판매 급등</div><strong>{{ surge_count }}</strong><div class="small text-muted">최근주 vs 지난주</div><div class="click-hint mt-2">클릭해서 품목 보기 →</div></a></div>
+    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'drop' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=drop#card-items"><div class="label">판매 급감</div><strong>{{ drop_count }}</strong><div class="small text-muted">최근주 vs 지난주</div><div class="click-hint mt-2">클릭해서 품목 보기 →</div></a></div>
+    <div class="col-md-4 col-xl-2"><a class="kpi-card p-3 {% if card_filter == 'risk' %}active-card{% endif %}" href="{% url 'dashboard' %}?upload_id={{ latest_file.id }}&page=dashboard&card=risk#card-items"><div class="label">재고 부족 위험</div><strong>{{ risk_count }}</strong><div class="small text-muted">기준: 최근주 입고포함 0~4주</div><div class="click-hint mt-2">클릭해서 품목 보기 →</div></a></div>
   </section>
 
   {% if card_title %}
