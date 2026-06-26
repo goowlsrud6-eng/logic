@@ -16,15 +16,15 @@ SPECIAL_OPTION_RE = re.compile(r'★\s*\d+\s*차\s*')
 OPTION_NORMALIZE_RE = re.compile(r'[\s/\\_\-\&\(\)\[\]\{\}\.,·]+')
 
 COLUMN_ALIASES = {
-    'order_number': ['발주번호', '발주 No', '발주NO', '오더번호'],
+    'order_number': ['발주번호', '발주 No', '발주NO', '오더번호', '일자-NO.', '일자NO', '일자-번호'],
     'product_code': ['상품코드', '이카운트코드'],
-    'supplier_option_name': ['공급처옵션명', '공급처옵션'],
+    'supplier_option_name': ['공급처옵션명', '공급처옵션', '품목코드'],
     'product_name': ['상품명', '품목명'],
-    'option_name': ['옵션명', '옵션'],
+    'option_name': ['옵션명', '옵션', '규격'],
     'available_stock': ['가용재고', '현재고'],
-    'inbound_qty': ['총입고예정', '입고예정수량', '입고예정', '수량'],
-    'inbound_date': ['입고예정일', '입고일정', '일정'],
-    'memo': ['메모', '비고'],
+    'inbound_qty': ['총입고예정', '입고예정수량', '입고예정', '수량', '미구매수량'],
+    'inbound_date': ['입고예정일', '입고일정', '일정', '출고일'],
+    'memo': ['메모', '비고', '적요'],
     'delivery_qty': ['송장+배송', '배송'],
     'pending_qty': ['미출고', '접수'],
     'recent_week_sales': ['판매수량최근한주', '최근한주판매수량', '최근한주수량'],
@@ -527,7 +527,9 @@ def parse_product_master_workbook(uploaded_file):
 
 
 def parse_inbound_schedule_workbook(uploaded_file):
-    df = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=0).dropna(how='all')
+    raw = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=None)
+    header_row = find_header_row(raw)
+    df = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=header_row).dropna(how='all')
     colmap = build_column_map(df.columns)
     required = ['product_name', 'inbound_qty']
     missing = [name for name in required if name not in colmap]

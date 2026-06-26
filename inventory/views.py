@@ -353,11 +353,47 @@ def product_detail(request, product_name):
     })
 
 
+def save_inbound_from_post(request, today, redirect_to, **redirect_kwargs):
+    action = request.POST.get('action')
+    inbound_id = request.POST.get('inbound_id')
+    if action == 'delete' and inbound_id:
+        InboundSchedule.objects.filter(pk=inbound_id).delete()
+        messages.success(request, '입고예정 건을 삭제했습니다.')
+        return redirect(redirect_to, **redirect_kwargs)
+
+    form = InboundScheduleForm(request.POST)
+    if form.is_valid():
+        inbound_date = parse_date(form.cleaned_data['inbound_date'], today)
+        target = InboundSchedule.objects.filter(pk=inbound_id).first() if inbound_id else None
+        if not target:
+            latest_inbound_upload = UploadedFile.objects.filter(file_type=UploadedFile.FileType.INBOUND_SCHEDULE).order_by('-created_at').first()
+            target = InboundSchedule(uploaded_file=latest_inbound_upload or UploadedFile.objects.create(
+                original_name='manual-inbound',
+                file='manual/inbound.txt',
+                file_type=UploadedFile.FileType.INBOUND_SCHEDULE,
+                status=UploadedFile.Status.COMPLETED,
+                message='화면에서 직접 등록한 입고예정입니다.',
+            ))
+        target.order_number = form.cleaned_data['order_number']
+        target.supplier_option_name = form.cleaned_data['supplier_option_name']
+        target.product_name = form.cleaned_data['product_name']
+        target.option_name = form.cleaned_data['option_name']
+        target.inbound_date = inbound_date
+        target.quantity = form.cleaned_data['quantity']
+        target.memo = form.cleaned_data['memo']
+        target.status = InboundSchedule.Status.PLANNED
+        target.is_completed = False
+        target.save()
+        messages.success(request, '입고예정 건을 저장했습니다.')
+    else:
+        messages.error(request, '입고예정 입력값을 확인해주세요.')
+    return redirect(redirect_to, **redirect_kwargs)
+
+
 def inbound_schedule(request):
     today = timezone.localdate()
     if request.method == 'POST':
         action = request.POST.get('action')
-        inbound_id = request.POST.get('inbound_id')
         order_number = request.POST.get('order_number', '').strip()
         if action == 'bulk_delete' and order_number:
             deleted, _ = InboundSchedule.objects.filter(order_number=order_number).delete()
@@ -377,38 +413,7 @@ def inbound_schedule(request):
             else:
                 messages.error(request, '일괄 수정할 입고예정일 또는 비고를 입력해주세요.')
             return redirect('inbound_schedule')
-        if action == 'delete' and inbound_id:
-            InboundSchedule.objects.filter(pk=inbound_id).delete()
-            messages.success(request, '입고예정 건을 삭제했습니다.')
-            return redirect('inbound_schedule')
-
-        form = InboundScheduleForm(request.POST)
-        if form.is_valid():
-            inbound_date = parse_date(form.cleaned_data['inbound_date'], today)
-            target = InboundSchedule.objects.filter(pk=inbound_id).first() if inbound_id else None
-            if not target:
-                latest_inbound_upload = UploadedFile.objects.filter(file_type=UploadedFile.FileType.INBOUND_SCHEDULE).order_by('-created_at').first()
-                target = InboundSchedule(uploaded_file=latest_inbound_upload or UploadedFile.objects.create(
-                    original_name='manual-inbound',
-                    file='manual/inbound.txt',
-                    file_type=UploadedFile.FileType.INBOUND_SCHEDULE,
-                    status=UploadedFile.Status.COMPLETED,
-                    message='화면에서 직접 등록한 입고예정입니다.',
-                ))
-            target.order_number = form.cleaned_data['order_number']
-            target.supplier_option_name = form.cleaned_data['supplier_option_name']
-            target.product_name = form.cleaned_data['product_name']
-            target.option_name = form.cleaned_data['option_name']
-            target.inbound_date = inbound_date
-            target.quantity = form.cleaned_data['quantity']
-            target.memo = form.cleaned_data['memo']
-            target.status = InboundSchedule.Status.PLANNED
-            target.is_completed = False
-            target.save()
-            messages.success(request, '입고예정 건을 저장했습니다.')
-        else:
-            messages.error(request, '입고예정 입력값을 확인해주세요.')
-        return redirect('inbound_schedule')
+        return save_inbound_from_post(request, today, 'inbound_schedule')
 
     inbound_schedules = InboundSchedule.objects.order_by('order_number', 'inbound_date', 'product_name', 'option_name')
     groups = []
@@ -466,6 +471,25 @@ def inbound_schedule(request):
     })
 
 
+def inbound_order_detail(request, order_number):
+    today = timezone.localdate()
+    if request.method == 'POST':
+        return save_inbound_from_post(request, today, 'inbound_order_detail', order_number=order_number)
+    inbound_schedules = InboundSchedule.objects.filter(order_number=order_number).order_by('inbound_date', 'product_name', 'option_name')
+    product_names = sorted(set(inbound_schedules.values_list('product_name', flat=True)))
+    return render(request, 'inventory/inbound_order_detail.html', {
+        'order_number': order_number,
+        'inbound_schedules': inbound_schedules,
+        'product_names': product_names,
+        'total_quantity': sum(item.quantity or 0 for item in inbound_schedules),
+        'today': today,
+        'recent_products': request.session.get('recent_products', []),
+        'favorite_products': request.session.get('favorite_products', []),
+        'last_product_name': request.session.get('last_product_name', ''),
+        'last_upload_id': request.session.get('last_upload_id', ''),
+    })
+
+
 def excel_response(df, filename, sheet_name):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -500,12 +524,12 @@ def download_product_master_template(request):
 
 
 def download_inbound_schedule_template(request):
-    columns = ['발주번호', '공급처옵션명', '상품명', '옵션', '수량', '일정', '상태', '비고']
+    columns = ['No.', '일자-NO.', '거래처명', '품목코드', '바코드', '분류', '품목명', '규격', '적요', '미구매수량', '단가', '출고일']
     sample = pd.DataFrame([
-        ['2026/05/28-1', 'SUP-001', '촤르르반팔', '블랙/M', 40, '2026-06-19', '예정', '1차 입고'],
-        ['2026/06/10-2', 'SUP-003', '모자', '베이지/F', 100, '', '예정', '발주완료, 일정 미정'],
+        [1, '2026/05/28-1', '거래처A', 'SUP-001', '', '', '촤르르반팔', '블랙/M', '1차 입고', 40, 0, '2026-06-19'],
+        [2, '2026/06/10-2', '거래처B', 'SUP-003', '', '', '모자', '베이지/F', '발주완료', 100, 0, ''],
     ], columns=columns)
-    return excel_response(sample, 'inbound_schedule_template.xlsx', '입고예정수량')
+    return excel_response(sample, 'ecount_inbound_order_template.xlsx', '이카운트발주')
 
 
 def download_basic_template(request):
