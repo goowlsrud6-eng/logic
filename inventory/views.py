@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import InboundScheduleForm, MultiUploadInventoryForm
-from .models import InboundSchedule, ProductOptionMetric, UploadedFile
+from .models import InboundSchedule, ProductCloseStatus, ProductOptionMetric, UploadedFile
 from .services import (
     infer_week_label,
     first_lookup,
@@ -151,7 +151,9 @@ def summarize_products(option_rows):
         row['sales_days'] = max(row['sales_days'], item['sales_days'] or 0)
 
     summary = list(grouped.values())
+    closed_products = set(ProductCloseStatus.objects.filter(is_closed=True).values_list('product_name', flat=True))
     for row in summary:
+        row['is_closed'] = row['product_name'] in closed_products
         row['current_recent_weeks'] = safe_weeks(row['available_stock'], row['recent_daily_sales'] * 7)
         row['inbound_recent_weeks'] = safe_weeks(row['stock_after_inbound'], row['recent_daily_sales'] * 7)
         row['current_total_weeks'] = safe_weeks(row['available_stock'], row['total_daily_sales'] * 7)
@@ -284,6 +286,21 @@ def create_upload_record(uploaded, file_type, reference_date=None):
         reference_date=reference_date,
         week_label=infer_week_label('', uploaded.name, reference_date),
     )
+
+
+def toggle_product_closed(request):
+    if request.method != 'POST':
+        return redirect('dashboard')
+    product_name = request.POST.get('product_name', '').strip()
+    next_url = request.POST.get('next') or reverse('dashboard')
+    if product_name:
+        is_closed = request.POST.get('is_closed') == 'on'
+        ProductCloseStatus.objects.update_or_create(
+            product_name=product_name,
+            defaults={'is_closed': is_closed},
+        )
+        messages.success(request, f'{product_name} 마감 여부를 {"마감" if is_closed else "진행"}으로 저장했습니다.')
+    return redirect(next_url)
 
 
 def upload_inventory(request):

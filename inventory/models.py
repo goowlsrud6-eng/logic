@@ -116,3 +116,15 @@ class ProductMaster(models.Model):
 
     def __str__(self):
         return f'{self.product_name} / {self.option_name}'
+
+
+class ProductCloseStatus(models.Model):
+    product_name = models.CharField('상품명', max_length=255, unique=True)
+    is_closed = models.BooleanField('마감 여부', default=False)
+    updated_at = models.DateTimeField('수정 일시', auto_now=True)
+
+    class Meta:
+        ordering = ['product_name']
+
+    def __str__(self):
+        return f'{self.product_name} - {"마감" if self.is_closed else "진행"}'
