@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .forms import InboundScheduleForm, MultiUploadInventoryForm
-from .models import InboundSchedule, ProductCloseStatus, ProductOptionMetric, UploadedFile
+from .models import InboundSchedule, ProductCloseStatus, ProductOptionMetric, PurchaseOrderLine, UploadedFile
 from .services import (
     infer_week_label,
     first_lookup,
@@ -18,8 +18,11 @@ from .services import (
     judge_sales_trend,
     normalize_sales_trend,
     metric_key,
+    metric_keys,
+    order_label_from_number,
     parse_combined_single_sheet_workbook,
     parse_inbound_schedule_workbook,
+    parse_purchase_order_workbook,
     parse_product_master_workbook,
     parse_date,
     parse_special_stock_workbook,
@@ -332,19 +335,21 @@ def upload_inventory(request):
         return redirect('dashboard')
 
     reference_date = form.cleaned_data['reference_date'] or timezone.localdate()
+    purchase_memo = form.cleaned_data.get('purchase_order_memo', '')
     tasks = [
-        ('product_master_file', UploadedFile.FileType.PRODUCT_MASTER, parse_product_master_workbook, '상품기본정보/오픈일'),
-        ('inbound_schedule_file', UploadedFile.FileType.INBOUND_SCHEDULE, parse_inbound_schedule_workbook, '입고예정'),
-        ('stock_sales_file', UploadedFile.FileType.STOCK_SALES, parse_combined_single_sheet_workbook, '재고/판매 통합'),
+        ('product_master_file', UploadedFile.FileType.PRODUCT_MASTER, parse_product_master_workbook, '상품기본정보/오픈일', {}),
+        ('purchase_order_file', UploadedFile.FileType.PURCHASE_ORDER, parse_purchase_order_workbook, '발주서', {'memo': purchase_memo}),
+        ('inbound_schedule_file', UploadedFile.FileType.INBOUND_SCHEDULE, parse_inbound_schedule_workbook, '입고 상세일정', {}),
+        ('stock_sales_file', UploadedFile.FileType.STOCK_SALES, parse_combined_single_sheet_workbook, '재고/판매 통합', {}),
     ]
     success = []
-    for field_name, file_type, parser, label in tasks:
+    for field_name, file_type, parser, label, parser_kwargs in tasks:
         uploaded = form.cleaned_data.get(field_name)
         if not uploaded:
             continue
         record = create_upload_record(uploaded, file_type, reference_date)
         try:
-            count = parser(record)
+            count = parser(record, **parser_kwargs)
             success.append(f'{label} {count}건')
         except Exception as exc:
             record.status = UploadedFile.Status.FAILED
@@ -354,6 +359,56 @@ def upload_inventory(request):
     if success:
         messages.success(request, ' / '.join(success) + ' 처리 완료')
     return redirect('dashboard')
+
+
+def inbound_columns_for_product(option_rows, product_name):
+    row_keys = []
+    for idx, row in enumerate(option_rows):
+        row_keys.append((idx, set(metric_keys(row['product_code'], row['supplier_option_name'], row['product_name'], row['option_name']))))
+    columns = []
+    matrix = defaultdict(lambda: defaultdict(float))
+    totals = defaultdict(float)
+    memo_groups = []
+
+    def match_index(product_code, supplier_option_name, item_product_name, option_name):
+        keys = set(metric_keys(product_code, supplier_option_name, item_product_name, option_name))
+        for idx, candidate_keys in row_keys:
+            if keys & candidate_keys:
+                return idx
+        return None
+
+    schedules = InboundSchedule.objects.filter(status=InboundSchedule.Status.PLANNED, product_name=product_name).order_by('inbound_date', 'order_number')
+    seen_date_keys = set()
+    for item in schedules:
+        idx = match_index(item.product_code, item.supplier_option_name, item.product_name, item.option_name)
+        if idx is None:
+            continue
+        column_key = f"date:{item.inbound_date.isoformat() if item.inbound_date else 'undated'}"
+        label = f'{item.inbound_date.month}/{item.inbound_date.day}' if item.inbound_date else '날짜 미정'
+        if column_key not in seen_date_keys:
+            seen_date_keys.add(column_key)
+            columns.append({'key': column_key, 'label': label, 'kind': 'detail'})
+        matrix[idx][column_key] += item.quantity or 0
+        totals[column_key] += item.quantity or 0
+
+    orders = PurchaseOrderLine.objects.filter(product_name=product_name).order_by('order_number', 'option_name')
+    seen_order_keys = set()
+    memo_lookup = {}
+    for item in orders:
+        idx = match_index(item.product_code, item.supplier_option_name, item.product_name, item.option_name)
+        if idx is None:
+            continue
+        column_key = f'order:{item.order_number}'
+        label = item.order_label or order_label_from_number(item.order_number)
+        if column_key not in seen_order_keys:
+            seen_order_keys.add(column_key)
+            columns.append({'key': column_key, 'label': label, 'kind': 'order'})
+            memo_lookup[item.order_number] = {'label': label, 'memo': item.memo}
+        matrix[idx][column_key] += item.quantity or 0
+        totals[column_key] += item.quantity or 0
+    for order_number, memo in memo_lookup.items():
+        memo_groups.append({'order_number': order_number, **memo})
+    return columns, matrix, totals, memo_groups
 
 
 def product_detail(request, product_name):
@@ -376,12 +431,18 @@ def product_detail(request, product_name):
     product_names = list(ProductOptionMetric.objects.filter(uploaded_file=latest_file).values_list('product_name', flat=True).distinct().order_by('product_name')) if latest_file else []
     previous_product, next_product = product_navigation(product_names, product_name)
     detail_totals = summarize_option_rows(option_rows)
+    inbound_columns, inbound_matrix, inbound_column_totals, purchase_memos = inbound_columns_for_product(option_rows, product_name)
+    for idx, row in enumerate(option_rows):
+        row['inbound_breakdown'] = inbound_matrix.get(idx, {})
+    detail_totals['inbound_breakdown'] = inbound_column_totals
     remember_product(request, product_name, upload_id)
     return render(request, 'inventory/product_detail.html', {
         'product_name': product_name,
         'metrics': option_rows,
         'latest_file': latest_file,
         'detail_totals': detail_totals,
+        'inbound_columns': inbound_columns,
+        'purchase_memos': purchase_memos,
         'previous_product': previous_product,
         'next_product': next_product,
         'recent_products': request.session.get('recent_products', []),
@@ -432,6 +493,15 @@ def inbound_schedule(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         order_number = request.POST.get('order_number', '').strip()
+        if action == 'purchase_delete' and order_number:
+            deleted, _ = PurchaseOrderLine.objects.filter(order_number=order_number).delete()
+            messages.success(request, f'발주 {order_number} {deleted}건을 삭제했습니다.')
+            return redirect('inbound_schedule')
+        if action == 'purchase_memo_update' and order_number:
+            memo = request.POST.get('purchase_memo', '').strip()
+            updated = PurchaseOrderLine.objects.filter(order_number=order_number).update(memo=memo)
+            messages.success(request, f'발주 {order_number} 메모를 {updated}건 수정했습니다.')
+            return redirect('inbound_schedule')
         if action == 'bulk_delete' and order_number:
             deleted, _ = InboundSchedule.objects.filter(order_number=order_number).delete()
             messages.success(request, f'발주번호 {order_number} 입고예정 {deleted}건을 일괄 삭제했습니다.')
@@ -496,9 +566,26 @@ def inbound_schedule(request):
         group['inbound_dates'] = ', '.join(sorted(date.strftime('%Y-%m-%d') for date in group['inbound_dates'])) or '날짜 미정'
         groups.append(group)
     groups.sort(key=lambda row: row['order_number'])
+    purchase_groups = []
+    purchase_grouped = defaultdict(lambda: {'quantity': 0, 'option_count': 0, 'product_names': set(), 'memo': '', 'details': []})
+    for item in PurchaseOrderLine.objects.order_by('order_number', 'product_name', 'option_name'):
+        group = purchase_grouped[item.order_number]
+        group['order_number'] = item.order_number
+        group['order_label'] = item.order_label or order_label_from_number(item.order_number)
+        group['quantity'] += item.quantity or 0
+        group['option_count'] += 1
+        group['product_names'].add(item.product_name)
+        if item.memo and not group['memo']:
+            group['memo'] = item.memo
+    for group in purchase_grouped.values():
+        product_names = sorted(group['product_names'])
+        group['product_label'] = product_names[0] if len(product_names) == 1 else f'{product_names[0]} 외 {len(product_names) - 1}건' if product_names else '-'
+        purchase_groups.append(group)
+    purchase_groups.sort(key=lambda row: row['order_number'])
     return render(request, 'inventory/inbound_schedule.html', {
         'inbound_schedules': inbound_schedules,
         'inbound_groups': groups,
+        'purchase_groups': purchase_groups,
         'today': today,
         'inbound_form': InboundScheduleForm(),
         'recent_products': request.session.get('recent_products', []),
@@ -513,12 +600,14 @@ def inbound_order_detail(request, order_number):
     if request.method == 'POST':
         return save_inbound_from_post(request, today, 'inbound_order_detail', order_number=order_number)
     inbound_schedules = InboundSchedule.objects.filter(order_number=order_number).order_by('inbound_date', 'product_name', 'option_name')
-    product_names = sorted(set(inbound_schedules.values_list('product_name', flat=True)))
+    purchase_lines = PurchaseOrderLine.objects.filter(order_number=order_number).order_by('product_name', 'option_name')
+    product_names = sorted(set(list(inbound_schedules.values_list('product_name', flat=True)) + list(purchase_lines.values_list('product_name', flat=True))))
     return render(request, 'inventory/inbound_order_detail.html', {
         'order_number': order_number,
         'inbound_schedules': inbound_schedules,
+        'purchase_lines': purchase_lines,
         'product_names': product_names,
-        'total_quantity': sum(item.quantity or 0 for item in inbound_schedules),
+        'total_quantity': sum(item.quantity or 0 for item in inbound_schedules) + sum(item.quantity or 0 for item in purchase_lines),
         'today': today,
         'recent_products': request.session.get('recent_products', []),
         'favorite_products': request.session.get('favorite_products', []),

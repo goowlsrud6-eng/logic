@@ -19,3 +19,11 @@ def weeks1(value):
         return f'{float(value or 0):,.1f}'
     except (TypeError, ValueError):
         return '0.0'
+
+@register.filter
+def get_item(mapping, key):
+    """Return a value from dict-like template data."""
+    try:
+        return mapping.get(key, 0)
+    except AttributeError:
+        return 0

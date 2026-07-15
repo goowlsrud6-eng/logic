@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DailyShipment, InboundSchedule, ProductCloseStatus, ProductMaster, ProductOptionMetric, UploadedFile
+from .models import DailyShipment, InboundSchedule, ProductCloseStatus, ProductMaster, PurchaseOrderLine, ProductOptionMetric, UploadedFile
 
 
 @admin.register(UploadedFile)
@@ -42,3 +42,10 @@ class ProductCloseStatusAdmin(admin.ModelAdmin):
     list_display = ('product_name', 'is_closed', 'updated_at')
     search_fields = ('product_name',)
     list_filter = ('is_closed',)
+
+
+@admin.register(PurchaseOrderLine)
+class PurchaseOrderLineAdmin(admin.ModelAdmin):
+    list_display = ('order_label', 'order_number', 'product_name', 'option_name', 'quantity', 'memo', 'created_at')
+    search_fields = ('order_number', 'product_name', 'option_name', 'product_code', 'supplier_option_name')
+    list_filter = ('order_label', 'created_at')

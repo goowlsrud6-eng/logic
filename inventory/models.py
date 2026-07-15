@@ -6,6 +6,7 @@ class UploadedFile(models.Model):
         STOCK_SALES = 'stock_sales', '재고/판매 통합'
         PRODUCT_MASTER = 'product_master', '상품기본정보/오픈일'
         INBOUND_SCHEDULE = 'inbound_schedule', '입고예정'
+        PURCHASE_ORDER = 'purchase_order', '발주서'
         LEGACY = 'legacy', '기존 특별재고'
 
     class Status(models.TextChoices):
@@ -101,6 +102,26 @@ class InboundSchedule(models.Model):
 
     def __str__(self):
         return f'{self.inbound_date or "날짜 미정"} {self.product_name} {self.quantity}'
+
+
+class PurchaseOrderLine(models.Model):
+    uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE, related_name='purchase_order_lines')
+    order_number = models.CharField('전표번호/발주번호', max_length=120)
+    order_label = models.CharField('발주 표시명', max_length=50, blank=True)
+    product_code = models.CharField('상품코드', max_length=120, blank=True)
+    supplier_option_name = models.CharField('공급처옵션명', max_length=120, blank=True)
+    product_name = models.CharField('상품명', max_length=255)
+    option_name = models.CharField('옵션명', max_length=255, blank=True)
+    quantity = models.FloatField('발주수량', default=0)
+    memo = models.CharField('입고예정 메모', max_length=255, blank=True)
+    created_at = models.DateTimeField('등록 일시', auto_now_add=True)
+    updated_at = models.DateTimeField('수정 일시', auto_now=True)
+
+    class Meta:
+        ordering = ['order_number', 'product_name', 'option_name']
+
+    def __str__(self):
+        return f'{self.order_label or self.order_number} {self.product_name} {self.quantity}'
 
 
 class ProductMaster(models.Model):

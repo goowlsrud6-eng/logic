@@ -9,20 +9,20 @@ from openpyxl import load_workbook
 from django.db.models import Sum
 from django.utils import timezone
 
-from .models import DailyShipment, InboundSchedule, ProductMaster, ProductOptionMetric, UploadedFile
+from .models import DailyShipment, InboundSchedule, ProductMaster, ProductOptionMetric, PurchaseOrderLine, UploadedFile
 
 WEEK_RE = re.compile(r'(\d{4}-\d{4})')
 SPECIAL_OPTION_RE = re.compile(r'★\s*\d+\s*차\s*')
 OPTION_NORMALIZE_RE = re.compile(r'[\s/\\_\-\&\(\)\[\]\{\}\.,·]+')
 
 COLUMN_ALIASES = {
-    'order_number': ['발주번호', '발주 No', '발주NO', '오더번호', '일자-NO.', '일자NO', '일자-번호'],
+    'order_number': ['발주번호', '전표번호', '발주 No', '발주NO', '오더번호', '일자-NO.', '일자NO', '일자-번호'],
     'product_code': ['상품코드', '이카운트코드'],
     'supplier_option_name': ['공급처옵션명', '공급처옵션', '품목코드'],
     'product_name': ['상품명', '품목명'],
     'option_name': ['옵션명', '옵션', '규격'],
     'available_stock': ['가용재고', '현재고'],
-    'inbound_qty': ['총입고예정', '입고예정수량', '입고예정', '수량', '미구매수량'],
+    'inbound_qty': ['총입고예정', '입고예정수량', '입고예정', '수량', '미구매수량', '발주수량'],
     'inbound_date': ['입고예정일', '입고일정', '일정', '출고일'],
     'memo': ['메모', '비고', '적요'],
     'delivery_qty': ['송장+배송', '배송'],
@@ -62,6 +62,17 @@ def week_label_from_date(reference_date):
     monday = reference_date - timedelta(days=reference_date.weekday())
     friday = monday + timedelta(days=4)
     return f'{monday:%m%d}-{friday:%m%d}'
+
+
+def order_label_from_number(order_number):
+    compact = re.sub(r'[^0-9]', '', str(order_number or ''))
+    if len(compact) >= 8:
+        try:
+            order_date = datetime.strptime(compact[:8], '%Y%m%d').date()
+            return f'{order_date.month}/{order_date.day} 발주'
+        except ValueError:
+            pass
+    return str(order_number or '').strip() or '발주'
 
 
 def infer_week_label(explicit_label, workbook_path, reference_date=None):
@@ -257,12 +268,17 @@ def find_master_open_date(product_code, supplier_option_name, product_name, opti
 
 
 def planned_inbound_by_key():
-    today = timezone.localdate()
     rows = InboundSchedule.objects.filter(status=InboundSchedule.Status.PLANNED).values(
         'product_code', 'supplier_option_name', 'product_name', 'option_name'
     ).annotate(quantity=Sum('quantity'))
     result = defaultdict(float)
     for row in rows:
+        for key in metric_keys(row['product_code'], row['supplier_option_name'], row['product_name'], row['option_name']):
+            result[key] += row['quantity'] or 0
+    order_rows = PurchaseOrderLine.objects.values(
+        'product_code', 'supplier_option_name', 'product_name', 'option_name'
+    ).annotate(quantity=Sum('quantity'))
+    for row in order_rows:
         for key in metric_keys(row['product_code'], row['supplier_option_name'], row['product_name'], row['option_name']):
             result[key] += row['quantity'] or 0
     return result
@@ -528,6 +544,46 @@ def parse_product_master_workbook(uploaded_file):
     uploaded_file.file_type = UploadedFile.FileType.PRODUCT_MASTER
     uploaded_file.status = UploadedFile.Status.COMPLETED
     uploaded_file.message = f'{count}개 상품기본정보를 저장했습니다.'
+    uploaded_file.save(update_fields=['file_type', 'status', 'message'])
+    return count
+
+
+def parse_purchase_order_workbook(uploaded_file, memo=''):
+    raw = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=None)
+    header_row = find_header_row(raw)
+    df = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=header_row).dropna(how='all')
+    colmap = build_column_map(df.columns)
+    required = ['order_number', 'product_name', 'inbound_qty']
+    missing = [name for name in required if name not in colmap]
+    if missing:
+        raise ValueError('필수 컬럼이 없습니다: ' + ', '.join(missing))
+    count = 0
+    for _, row in df.iterrows():
+        order_number = str(row.get(colmap['order_number'], '') or '').strip()
+        product_name = str(row.get(colmap['product_name'], '') or '').strip()
+        qty = as_number(row.get(colmap['inbound_qty']))
+        if not order_number or not product_name or qty <= 0:
+            continue
+        product_code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
+        supplier = str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else product_code
+        option_name = clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else ''
+        PurchaseOrderLine.objects.update_or_create(
+            order_number=order_number,
+            product_code=product_code,
+            supplier_option_name=supplier,
+            product_name=product_name,
+            option_name=option_name,
+            defaults={
+                'uploaded_file': uploaded_file,
+                'order_label': order_label_from_number(order_number),
+                'quantity': qty,
+                'memo': memo,
+            },
+        )
+        count += 1
+    uploaded_file.file_type = UploadedFile.FileType.PURCHASE_ORDER
+    uploaded_file.status = UploadedFile.Status.COMPLETED
+    uploaded_file.message = f'{count}개 발주수량을 저장/수정했습니다.'
     uploaded_file.save(update_fields=['file_type', 'status', 'message'])
     return count
 

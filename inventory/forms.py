@@ -18,15 +18,26 @@ class MultiUploadInventoryForm(forms.Form):
         required=False,
         widget=forms.FileInput(attrs={'class': 'form-control'}),
     )
+    purchase_order_file = forms.FileField(
+        label='3. 발주서 파일',
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-control'}),
+    )
+    purchase_order_memo = forms.CharField(
+        label='발주 공통 입고예정 메모',
+        required=False,
+        max_length=255,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '예: 7월 중순 / 7월 말 분할입고 예정'}),
+    )
     inbound_schedule_file = forms.FileField(
-        label='3. 입고예정 파일',
+        label='4. 입고 상세일정 파일',
         required=False,
         widget=forms.FileInput(attrs={'class': 'form-control'}),
     )
 
     def clean(self):
         cleaned = super().clean()
-        if not any(cleaned.get(name) for name in ['stock_sales_file', 'product_master_file', 'inbound_schedule_file']):
+        if not any(cleaned.get(name) for name in ['stock_sales_file', 'product_master_file', 'purchase_order_file', 'inbound_schedule_file']):
             raise forms.ValidationError('업로드할 파일을 하나 이상 선택해주세요.')
         return cleaned
 
