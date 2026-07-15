@@ -14,6 +14,7 @@ from .models import InboundSchedule, ProductCloseStatus, ProductOptionMetric, Up
 from .services import (
     infer_week_label,
     first_lookup,
+    find_master_open_date,
     judge_sales_trend,
     normalize_sales_trend,
     metric_key,
@@ -73,11 +74,16 @@ def live_option_rows(metrics, current_file=None):
     for item in metrics:
         inbound_qty = first_lookup(inbound_lookup, item.product_code, item.supplier_option_name, item.product_name, item.option_name, default=0)
         stock_after = item.available_stock + inbound_qty
-        recent_period_days = recent_sales_period_days(item.sales_days)
+        sales_days = item.sales_days or 0
+        if sales_days <= 0 and current_file:
+            open_date = find_master_open_date(item.product_code, item.supplier_option_name, item.product_name, item.option_name)
+            reference_date = current_file.reference_date or timezone.localdate()
+            sales_days = max((reference_date - open_date).days, 1) if open_date else 0
+        recent_period_days = recent_sales_period_days(sales_days)
         recent_daily_sales = item.recent_week_sales / recent_period_days if item.recent_week_sales and recent_period_days > 0 else 0
-        recent_rate = recent_weekly_rate(item.recent_week_sales, item.sales_days)
+        recent_rate = recent_weekly_rate(item.recent_week_sales, sales_days)
         inbound_recent = safe_weeks(stock_after, recent_rate)
-        total_daily_sales = item.total_sales / item.sales_days if item.total_sales > 0 and item.sales_days > 0 else 0
+        total_daily_sales = item.total_sales / sales_days if item.total_sales > 0 and sales_days > 0 else 0
         weekly_total_rate = total_daily_sales * 7
         previous_sales = first_lookup(previous_sales_lookup, item.product_code, item.supplier_option_name, item.product_name, item.option_name, default=0)
         previous_weeks = safe_weeks(stock_after, previous_sales)
@@ -96,7 +102,7 @@ def live_option_rows(metrics, current_file=None):
             'pending_qty': item.pending_qty,
             'recent_week_sales': item.recent_week_sales,
             'total_sales': item.total_sales,
-            'sales_days': item.sales_days,
+            'sales_days': sales_days,
             'total_daily_sales': total_daily_sales,
             'recent_sales_days': recent_period_days,
             'recent_daily_sales': recent_daily_sales,
