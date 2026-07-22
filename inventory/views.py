@@ -295,7 +295,13 @@ def dashboard(request):
         'last_product_name': request.session.get('last_product_name', ''),
         'last_upload_id': request.session.get('last_upload_id', latest_file.id if latest_file else ''),
         'stock_uploads': UploadedFile.objects.filter(file_type__in=[UploadedFile.FileType.STOCK_SALES, UploadedFile.FileType.LEGACY], status=UploadedFile.Status.COMPLETED).order_by('-reference_date', '-created_at')[:20],
-        'uploads': UploadedFile.objects.order_by('-created_at')[:10],
+        'uploads': UploadedFile.objects.filter(
+            file_type__in=[
+                UploadedFile.FileType.STOCK_SALES,
+                UploadedFile.FileType.LEGACY,
+                UploadedFile.FileType.PRODUCT_MASTER,
+            ],
+        ).order_by('-created_at')[:10],
     }
     return render(request, 'inventory/dashboard.html', context)
 
@@ -329,10 +335,11 @@ def toggle_product_closed(request):
 def upload_inventory(request):
     if request.method != 'POST':
         return redirect('dashboard')
+    redirect_target = 'inbound_schedule' if request.POST.get('redirect_to') == 'inbound_schedule' else 'dashboard'
     form = MultiUploadInventoryForm(request.POST, request.FILES)
     if not form.is_valid():
         messages.error(request, '업로드할 파일을 하나 이상 선택해주세요.')
-        return redirect('dashboard')
+        return redirect(redirect_target)
 
     reference_date = form.cleaned_data['reference_date'] or timezone.localdate()
     purchase_memo = form.cleaned_data.get('purchase_order_memo', '')
@@ -358,7 +365,7 @@ def upload_inventory(request):
             messages.error(request, f'{label} 처리 실패: {exc}')
     if success:
         messages.success(request, ' / '.join(success) + ' 처리 완료')
-    return redirect('dashboard')
+    return redirect(redirect_target)
 
 
 def inbound_columns_for_product(option_rows, product_name):
@@ -588,6 +595,10 @@ def inbound_schedule(request):
         'purchase_groups': purchase_groups,
         'today': today,
         'inbound_form': InboundScheduleForm(),
+        'upload_form': MultiUploadInventoryForm(),
+        'inbound_uploads': UploadedFile.objects.filter(
+            file_type__in=[UploadedFile.FileType.PURCHASE_ORDER, UploadedFile.FileType.INBOUND_SCHEDULE],
+        ).order_by('-created_at')[:10],
         'recent_products': request.session.get('recent_products', []),
         'favorite_products': request.session.get('favorite_products', []),
         'last_product_name': request.session.get('last_product_name', ''),
