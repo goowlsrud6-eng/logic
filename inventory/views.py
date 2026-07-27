@@ -573,6 +573,23 @@ def inbound_schedule(request):
         group['inbound_dates'] = ', '.join(sorted(date.strftime('%Y-%m-%d') for date in group['inbound_dates'])) or '날짜 미정'
         groups.append(group)
     groups.sort(key=lambda row: row['order_number'])
+    detailed_groups = []
+    detailed_grouped = defaultdict(lambda: {'quantity': 0, 'option_count': 0, 'inbound_dates': set()})
+    for item in inbound_schedules:
+        if item.order_number or not item.product_name:
+            continue
+        group = detailed_grouped[item.product_name]
+        group['product_name'] = item.product_name
+        group['quantity'] += item.quantity or 0
+        group['option_count'] += 1
+        if item.inbound_date:
+            group['inbound_dates'].add(item.inbound_date)
+    for group in detailed_grouped.values():
+        group['inbound_dates'] = ', '.join(
+            sorted(date.strftime('%Y-%m-%d') for date in group['inbound_dates'])
+        ) or '날짜 미정'
+        detailed_groups.append(group)
+    detailed_groups.sort(key=lambda row: row['product_name'])
     purchase_groups = []
     purchase_grouped = defaultdict(lambda: {'quantity': 0, 'option_count': 0, 'product_names': set(), 'memo': '', 'details': []})
     for item in PurchaseOrderLine.objects.order_by('order_number', 'product_name', 'option_name'):
@@ -592,6 +609,7 @@ def inbound_schedule(request):
     return render(request, 'inventory/inbound_schedule.html', {
         'inbound_schedules': inbound_schedules,
         'inbound_groups': groups,
+        'detailed_groups': detailed_groups,
         'purchase_groups': purchase_groups,
         'today': today,
         'inbound_form': InboundScheduleForm(),
@@ -619,6 +637,34 @@ def inbound_order_detail(request, order_number):
         'purchase_lines': purchase_lines,
         'product_names': product_names,
         'total_quantity': sum(item.quantity or 0 for item in inbound_schedules) + sum(item.quantity or 0 for item in purchase_lines),
+        'today': today,
+        'recent_products': request.session.get('recent_products', []),
+        'favorite_products': request.session.get('favorite_products', []),
+        'last_product_name': request.session.get('last_product_name', ''),
+        'last_upload_id': request.session.get('last_upload_id', ''),
+    })
+
+
+def inbound_product_detail(request, product_name):
+    today = timezone.localdate()
+    if request.method == 'POST':
+        return save_inbound_from_post(
+            request,
+            today,
+            'inbound_product_detail',
+            product_name=product_name,
+        )
+    inbound_schedules = InboundSchedule.objects.filter(
+        order_number='',
+        product_name=product_name,
+    ).order_by('inbound_date', 'option_name')
+    return render(request, 'inventory/inbound_order_detail.html', {
+        'detail_title': f'상세 입고일정: {product_name}',
+        'order_number': '',
+        'inbound_schedules': inbound_schedules,
+        'purchase_lines': PurchaseOrderLine.objects.none(),
+        'product_names': [product_name],
+        'total_quantity': sum(item.quantity or 0 for item in inbound_schedules),
         'today': today,
         'recent_products': request.session.get('recent_products', []),
         'favorite_products': request.session.get('favorite_products', []),
@@ -661,12 +707,12 @@ def download_product_master_template(request):
 
 
 def download_inbound_schedule_template(request):
-    columns = ['No.', '일자-NO.', '거래처명', '품목코드', '바코드', '분류', '품목명', '규격', '적요', '미구매수량', '단가', '출고일']
+    columns = ['상품코드', '이지어드민 상품코드', '상품명', '옵션명', '입고 예정일', '수량', '비고']
     sample = pd.DataFrame([
-        [1, '2026/05/28-1', '거래처A', 'SUP-001', '', '', '촤르르반팔', '블랙/M', '1차 입고', 40, 0, '2026-06-19'],
-        [2, '2026/06/10-2', '거래처B', 'SUP-003', '', '', '모자', '베이지/F', '발주완료', 100, 0, ''],
+        ['E2406V9065', 'S173402', 'ECLL 페이크반팔러_AA', '[S/단가라그레이]', '2026-07-23', 3600, ''],
+        ['E2406V9077', 'S173414', 'ECLL 페이크반팔러_AA', '[S/도트크림]', '2026-07-23', 3423, ''],
     ], columns=columns)
-    return excel_response(sample, 'ecount_inbound_order_template.xlsx', '이카운트발주')
+    return excel_response(sample, 'inbound_schedule_template.xlsx', '입고상세일정')
 
 
 def download_basic_template(request):

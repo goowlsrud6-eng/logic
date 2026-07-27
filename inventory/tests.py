@@ -2,8 +2,10 @@ import pandas as pd
 from django.test import SimpleTestCase
 
 from .services import (
+    build_column_map,
     extract_purchase_order_number,
     order_label_from_number,
+    parse_date,
     split_ecount_product_option,
 )
 
@@ -36,3 +38,21 @@ class PurchaseOrderFormatTests(SimpleTestCase):
 
         self.assertEqual(order_label_from_number(order_number), '7/9 발주')
         self.assertEqual(order_number, '20260709-2')
+
+
+class InboundScheduleFormatTests(SimpleTestCase):
+    def test_maps_new_detailed_inbound_headers(self):
+        columns = ['상품코드', '이지어드민 상품코드', '상품명', '옵션명', '입고 예정일', '수량', '비고']
+
+        mapped = build_column_map(columns)
+
+        self.assertEqual(mapped['product_code'], '상품코드')
+        self.assertEqual(mapped['supplier_option_name'], '이지어드민 상품코드')
+        self.assertEqual(mapped['product_name'], '상품명')
+        self.assertEqual(mapped['option_name'], '옵션명')
+        self.assertEqual(mapped['inbound_date'], '입고 예정일')
+        self.assertEqual(mapped['inbound_qty'], '수량')
+        self.assertEqual(mapped['memo'], '비고')
+
+    def test_parses_iso_inbound_date(self):
+        self.assertEqual(str(parse_date('2026-07-23')), '2026-07-23')

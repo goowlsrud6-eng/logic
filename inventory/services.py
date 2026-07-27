@@ -18,7 +18,7 @@ OPTION_NORMALIZE_RE = re.compile(r'[\s/\\_\-\&\(\)\[\]\{\}\.,·]+')
 COLUMN_ALIASES = {
     'order_number': ['발주번호', '전표번호', '발주 No', '발주NO', '오더번호', '일자-NO.', '일자NO', '일자-번호'],
     'product_code': ['상품코드', '이카운트코드'],
-    'supplier_option_name': ['공급처옵션명', '공급처옵션', '품목코드'],
+    'supplier_option_name': ['공급처옵션명', '공급처옵션', '이지어드민 상품코드', '이지어드민상품코드', '품목코드'],
     'product_name': ['상품명', '품목명'],
     'option_name': ['옵션명', '옵션', '규격'],
     'available_stock': ['가용재고', '현재고'],
@@ -155,6 +155,12 @@ def as_number(value):
         return 0.0
     numeric = pd.to_numeric(value, errors='coerce')
     return 0.0 if pd.isna(numeric) else float(numeric)
+
+
+def cell_text(value):
+    if value is None or pd.isna(value):
+        return ''
+    return str(value).strip()
 
 
 def parse_date(value, reference_date=None):
@@ -654,23 +660,23 @@ def parse_inbound_schedule_workbook(uploaded_file):
     header_row = find_header_row(raw)
     df = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=header_row).dropna(how='all')
     colmap = build_column_map(df.columns)
-    required = ['product_name', 'inbound_qty']
+    required = ['product_code', 'supplier_option_name', 'product_name', 'option_name', 'inbound_date', 'inbound_qty']
     missing = [name for name in required if name not in colmap]
     if missing:
         raise ValueError('필수 컬럼이 없습니다: ' + ', '.join(missing))
     count = 0
     for _, row in df.iterrows():
-        product_name = str(row.get(colmap['product_name'], '') or '').strip()
+        product_name = cell_text(row.get(colmap['product_name']))
         qty = as_number(row.get(colmap['inbound_qty']))
         if not product_name or qty <= 0:
             continue
         inbound_date = parse_date(row.get(colmap.get('inbound_date')), uploaded_file.reference_date) if 'inbound_date' in colmap else None
-        order_number = str(row.get(colmap.get('order_number'), '') or '').strip() if 'order_number' in colmap else ''
-        product_code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
-        supplier = str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else ''
-        option_name = clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else ''
-        memo = str(row.get(colmap.get('memo'), '') or '').strip() if 'memo' in colmap else ''
-        status_label = str(row.get(colmap.get('status'), '') or '').strip() if 'status' in colmap else ''
+        order_number = cell_text(row.get(colmap.get('order_number'))) if 'order_number' in colmap else ''
+        product_code = cell_text(row.get(colmap['product_code']))
+        supplier = cell_text(row.get(colmap['supplier_option_name']))
+        option_name = clean_option_name(cell_text(row.get(colmap['option_name'])))
+        memo = cell_text(row.get(colmap.get('memo'))) if 'memo' in colmap else ''
+        status_label = cell_text(row.get(colmap.get('status'))) if 'status' in colmap else ''
         status = {
             '완료': InboundSchedule.Status.COMPLETED,
             '취소': InboundSchedule.Status.CANCELED,
@@ -678,15 +684,13 @@ def parse_inbound_schedule_workbook(uploaded_file):
         }.get(status_label, InboundSchedule.Status.PLANNED)
         base_qs = InboundSchedule.objects.filter(
             order_number=order_number,
+            product_code=product_code,
             supplier_option_name=supplier,
             product_name=product_name,
             option_name=option_name,
+            inbound_date=inbound_date,
         )
-        if memo:
-            target = base_qs.filter(memo=memo).first()
-        else:
-            same_option = list(base_qs[:2])
-            target = same_option[0] if len(same_option) == 1 else base_qs.filter(inbound_date=inbound_date).first()
+        target = base_qs.first()
 
         defaults = {
             'uploaded_file': uploaded_file,
@@ -710,6 +714,8 @@ def parse_inbound_schedule_workbook(uploaded_file):
                 **defaults,
             )
         count += 1
+    if count == 0:
+        raise ValueError('수량이 0보다 큰 입고 상세일정을 찾지 못했습니다. 상품코드/이지어드민 상품코드/상품명/옵션명/입고 예정일/수량 컬럼을 확인해주세요.')
     uploaded_file.file_type = UploadedFile.FileType.INBOUND_SCHEDULE
     uploaded_file.status = UploadedFile.Status.COMPLETED
     uploaded_file.message = f'{count}개 입고예정 일정을 저장/수정했습니다.'

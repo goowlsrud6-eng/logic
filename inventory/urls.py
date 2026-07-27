@@ -7,6 +7,7 @@ urlpatterns = [
     path('products/closed/', views.toggle_product_closed, name='toggle_product_closed'),
     path('products/<path:product_name>/', views.product_detail, name='product_detail'),
     path('inbound/', views.inbound_schedule, name='inbound_schedule'),
+    path('inbound/products/<path:product_name>/', views.inbound_product_detail, name='inbound_product_detail'),
     path('inbound/orders/<path:order_number>/', views.inbound_order_detail, name='inbound_order_detail'),
     path('templates/basic/', views.download_basic_template, name='download_basic_template'),
     path('templates/product-master/', views.download_product_master_template, name='download_product_master_template'),
