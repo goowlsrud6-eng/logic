@@ -75,6 +75,44 @@ def order_label_from_number(order_number):
     return str(order_number or '').strip() or '발주'
 
 
+def extract_purchase_order_number(raw_df):
+    """Read an Ecount order number from the document information rows.
+
+    Ecount purchase-order downloads place ``전표번호`` above the item table,
+    rather than repeating it in every item row.  The label and value can be in
+    one cell (``전표번호 : 20260709-2``) or in neighboring cells.
+    """
+    order_pattern = re.compile(r'\b(\d{8}\s*-\s*\d+)\b')
+    label_pattern = re.compile(r'(?:전표번호|발주번호)', re.IGNORECASE)
+    for row_idx in range(min(8, len(raw_df))):
+        row_values = raw_df.iloc[row_idx].tolist()
+        for col_idx, value in enumerate(row_values):
+            if value is None or pd.isna(value):
+                continue
+            text = str(value).strip()
+            if not label_pattern.search(text):
+                continue
+            match = order_pattern.search(text)
+            if match:
+                return re.sub(r'\s+', '', match.group(1))
+            for adjacent in row_values[col_idx + 1:]:
+                if adjacent is None or pd.isna(adjacent):
+                    continue
+                match = order_pattern.search(str(adjacent).strip())
+                if match:
+                    return re.sub(r'\s+', '', match.group(1))
+    return ''
+
+
+def split_ecount_product_option(value):
+    """Split Ecount's ``품목명[규격]`` value into product and option names."""
+    text = str(value or '').strip()
+    match = re.match(r'^(.*?)\s*\[([^\[\]]+)\]\s*$', text)
+    if not match:
+        return text, ''
+    return match.group(1).strip(), clean_option_name(match.group(2))
+
+
 def infer_week_label(explicit_label, workbook_path, reference_date=None):
     if explicit_label:
         return explicit_label
@@ -550,23 +588,44 @@ def parse_product_master_workbook(uploaded_file):
 
 def parse_purchase_order_workbook(uploaded_file, memo=''):
     raw = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=None)
+    document_order_number = extract_purchase_order_number(raw)
     header_row = find_header_row(raw)
     df = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=header_row).dropna(how='all')
     colmap = build_column_map(df.columns)
-    required = ['order_number', 'product_name', 'inbound_qty']
+    required = ['product_name', 'inbound_qty']
     missing = [name for name in required if name not in colmap]
+    if 'order_number' not in colmap and not document_order_number:
+        missing.append('order_number')
     if missing:
-        raise ValueError('필수 컬럼이 없습니다: ' + ', '.join(missing))
+        raise ValueError('발주서 필수 항목을 찾지 못했습니다: ' + ', '.join(missing))
+    combined_product_option = (
+        'product_name' in colmap
+        and '품목명' in normalize_header(colmap['product_name'])
+        and '규격' in normalize_header(colmap['product_name'])
+    )
     count = 0
     for _, row in df.iterrows():
-        order_number = str(row.get(colmap['order_number'], '') or '').strip()
-        product_name = str(row.get(colmap['product_name'], '') or '').strip()
+        row_order_number = row.get(colmap.get('order_number')) if 'order_number' in colmap else ''
+        order_number = '' if pd.isna(row_order_number) else str(row_order_number or '').strip()
+        order_number = order_number or document_order_number
+        raw_product_name = row.get(colmap['product_name'], '')
+        product_name = '' if pd.isna(raw_product_name) else str(raw_product_name or '').strip()
+        embedded_option = ''
+        if combined_product_option:
+            product_name, embedded_option = split_ecount_product_option(product_name)
         qty = as_number(row.get(colmap['inbound_qty']))
         if not order_number or not product_name or qty <= 0:
             continue
-        product_code = str(row.get(colmap.get('product_code'), '') or '').strip() if 'product_code' in colmap else ''
-        supplier = str(row.get(colmap.get('supplier_option_name'), '') or '').strip() if 'supplier_option_name' in colmap else product_code
-        option_name = clean_option_name(row.get(colmap.get('option_name'), '')) if 'option_name' in colmap else ''
+        raw_product_code = row.get(colmap.get('product_code')) if 'product_code' in colmap else ''
+        product_code = '' if pd.isna(raw_product_code) else str(raw_product_code or '').strip()
+        raw_supplier = row.get(colmap.get('supplier_option_name')) if 'supplier_option_name' in colmap else ''
+        supplier = '' if pd.isna(raw_supplier) else str(raw_supplier or '').strip()
+        product_code = product_code or supplier
+        supplier = supplier or product_code
+        raw_option = row.get(colmap.get('option_name')) if 'option_name' in colmap else ''
+        option_name = '' if pd.isna(raw_option) else clean_option_name(raw_option)
+        if not option_name or colmap.get('option_name') == colmap.get('product_name'):
+            option_name = embedded_option
         PurchaseOrderLine.objects.update_or_create(
             order_number=order_number,
             product_code=product_code,
@@ -581,6 +640,8 @@ def parse_purchase_order_workbook(uploaded_file, memo=''):
             },
         )
         count += 1
+    if count == 0:
+        raise ValueError('발주수량이 0보다 큰 품목을 찾지 못했습니다. 전표번호와 6행의 품목코드/품목명[규격]/수량을 확인해주세요.')
     uploaded_file.file_type = UploadedFile.FileType.PURCHASE_ORDER
     uploaded_file.status = UploadedFile.Status.COMPLETED
     uploaded_file.message = f'{count}개 발주수량을 저장/수정했습니다.'
