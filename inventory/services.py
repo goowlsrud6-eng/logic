@@ -655,22 +655,21 @@ def parse_purchase_order_workbook(uploaded_file, memo=''):
     return count
 
 
-def parse_inbound_schedule_workbook(uploaded_file):
-    raw = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=None)
-    header_row = find_header_row(raw)
-    df = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=header_row).dropna(how='all')
-    colmap = build_column_map(df.columns)
-    required = ['product_code', 'supplier_option_name', 'product_name', 'option_name', 'inbound_date', 'inbound_qty']
-    missing = [name for name in required if name not in colmap]
-    if missing:
-        raise ValueError('필수 컬럼이 없습니다: ' + ', '.join(missing))
-    count = 0
+def aggregate_inbound_schedule_rows(df, colmap, reference_date=None):
+    """Combine duplicate product-code rows for the same inbound date.
+
+    Vendors may split one product code over multiple rows.  Product code is the
+    primary identity in that file, while separate inbound dates must remain as
+    separate schedules.
+    """
+    aggregated = {}
+    source_count = 0
     for _, row in df.iterrows():
         product_name = cell_text(row.get(colmap['product_name']))
         qty = as_number(row.get(colmap['inbound_qty']))
         if not product_name or qty <= 0:
             continue
-        inbound_date = parse_date(row.get(colmap.get('inbound_date')), uploaded_file.reference_date) if 'inbound_date' in colmap else None
+        inbound_date = parse_date(row.get(colmap['inbound_date']), reference_date)
         order_number = cell_text(row.get(colmap.get('order_number'))) if 'order_number' in colmap else ''
         product_code = cell_text(row.get(colmap['product_code']))
         supplier = cell_text(row.get(colmap['supplier_option_name']))
@@ -682,42 +681,83 @@ def parse_inbound_schedule_workbook(uploaded_file):
             '취소': InboundSchedule.Status.CANCELED,
             '예정': InboundSchedule.Status.PLANNED,
         }.get(status_label, InboundSchedule.Status.PLANNED)
+        if product_code:
+            key = ('product_code', order_number, product_code, inbound_date)
+        else:
+            key = ('details', order_number, supplier, product_name, option_name, inbound_date)
+        if key not in aggregated:
+            aggregated[key] = {
+                'order_number': order_number,
+                'product_code': product_code,
+                'supplier_option_name': supplier,
+                'product_name': product_name,
+                'option_name': option_name,
+                'inbound_date': inbound_date,
+                'quantity': 0,
+                'memo': memo,
+                'status': status,
+            }
+        item = aggregated[key]
+        item['quantity'] += qty
+        if memo:
+            item['memo'] = memo
+        item['status'] = status
+        source_count += 1
+    return list(aggregated.values()), source_count
+
+
+def parse_inbound_schedule_workbook(uploaded_file):
+    raw = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=None)
+    header_row = find_header_row(raw)
+    df = pd.read_excel(uploaded_file.file.path, sheet_name=0, header=header_row).dropna(how='all')
+    colmap = build_column_map(df.columns)
+    required = ['product_code', 'supplier_option_name', 'product_name', 'option_name', 'inbound_date', 'inbound_qty']
+    missing = [name for name in required if name not in colmap]
+    if missing:
+        raise ValueError('필수 컬럼이 없습니다: ' + ', '.join(missing))
+    inbound_rows, source_count = aggregate_inbound_schedule_rows(df, colmap, uploaded_file.reference_date)
+    for item in inbound_rows:
         base_qs = InboundSchedule.objects.filter(
-            order_number=order_number,
-            product_code=product_code,
-            supplier_option_name=supplier,
-            product_name=product_name,
-            option_name=option_name,
-            inbound_date=inbound_date,
+            order_number=item['order_number'],
+            product_code=item['product_code'],
+            inbound_date=item['inbound_date'],
         )
-        target = base_qs.first()
+        if not item['product_code']:
+            base_qs = base_qs.filter(
+                supplier_option_name=item['supplier_option_name'],
+                product_name=item['product_name'],
+                option_name=item['option_name'],
+            )
+        existing = list(base_qs.order_by('pk'))
+        target = existing[0] if existing else None
 
         defaults = {
             'uploaded_file': uploaded_file,
-            'order_number': order_number,
-            'product_code': product_code,
-            'inbound_date': inbound_date,
-            'quantity': qty,
-            'memo': memo,
-            'status': status,
-            'is_completed': status == InboundSchedule.Status.COMPLETED,
+            'order_number': item['order_number'],
+            'product_code': item['product_code'],
+            'supplier_option_name': item['supplier_option_name'],
+            'product_name': item['product_name'],
+            'option_name': item['option_name'],
+            'inbound_date': item['inbound_date'],
+            'quantity': item['quantity'],
+            'memo': item['memo'],
+            'status': item['status'],
+            'is_completed': item['status'] == InboundSchedule.Status.COMPLETED,
         }
         if target:
             for field, value in defaults.items():
                 setattr(target, field, value)
             target.save(update_fields=list(defaults.keys()) + ['updated_at'])
+            if len(existing) > 1:
+                InboundSchedule.objects.filter(pk__in=[record.pk for record in existing[1:]]).delete()
         else:
-            InboundSchedule.objects.create(
-                supplier_option_name=supplier,
-                product_name=product_name,
-                option_name=option_name,
-                **defaults,
-            )
-        count += 1
-    if count == 0:
+            InboundSchedule.objects.create(**defaults)
+    count = len(inbound_rows)
+    if not count:
         raise ValueError('수량이 0보다 큰 입고 상세일정을 찾지 못했습니다. 상품코드/이지어드민 상품코드/상품명/옵션명/입고 예정일/수량 컬럼을 확인해주세요.')
     uploaded_file.file_type = UploadedFile.FileType.INBOUND_SCHEDULE
     uploaded_file.status = UploadedFile.Status.COMPLETED
-    uploaded_file.message = f'{count}개 입고예정 일정을 저장/수정했습니다.'
+    merged_count = source_count - count
+    uploaded_file.message = f'{count}개 입고예정 일정을 저장/수정했습니다. 중복 상품코드 {merged_count}행을 합산했습니다.'
     uploaded_file.save(update_fields=['file_type', 'status', 'message'])
     return count

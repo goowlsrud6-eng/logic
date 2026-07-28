@@ -2,6 +2,7 @@ import pandas as pd
 from django.test import SimpleTestCase
 
 from .services import (
+    aggregate_inbound_schedule_rows,
     build_column_map,
     extract_purchase_order_number,
     order_label_from_number,
@@ -56,3 +57,28 @@ class InboundScheduleFormatTests(SimpleTestCase):
 
     def test_parses_iso_inbound_date(self):
         self.assertEqual(str(parse_date('2026-07-23')), '2026-07-23')
+
+    def test_sums_duplicate_product_codes_for_same_date(self):
+        columns = ['상품코드', '이지어드민 상품코드', '상품명', '옵션명', '입고 예정일', '수량', '비고']
+        df = pd.DataFrame([
+            ['E2512V9110_SS', 'S236765', 'ECLL 스포츠타월 4개1세트 시즌2', '[디즈니(4개1세트)]', '2026-07-15', 2480, ''],
+            ['E2512V9110_SS', 'S236765', 'ECLL 스포츠타월 4개1세트 시즌2', '[디즈니(4개1세트)]', '2026-07-15', 21, ''],
+        ], columns=columns)
+
+        rows, source_count = aggregate_inbound_schedule_rows(df, build_column_map(columns))
+
+        self.assertEqual(source_count, 2)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['quantity'], 2501)
+
+    def test_keeps_same_product_code_on_different_dates_separate(self):
+        columns = ['상품코드', '이지어드민 상품코드', '상품명', '옵션명', '입고 예정일', '수량', '비고']
+        df = pd.DataFrame([
+            ['E2512V9110_SS', 'S236765', '스포츠타월', '디즈니', '2026-07-15', 100, ''],
+            ['E2512V9110_SS', 'S236765', '스포츠타월', '디즈니', '2026-07-31', 200, ''],
+        ], columns=columns)
+
+        rows, _ = aggregate_inbound_schedule_rows(df, build_column_map(columns))
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sorted(row['quantity'] for row in rows), [100, 200])
